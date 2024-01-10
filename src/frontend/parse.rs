@@ -292,10 +292,16 @@ impl<'a, T> From<Input<'a, T>> for Span {
             .span(value.location_offset(), value.location_offset())
     }
 }
+type PError<'a, I> = VerboseError<Input<'a, I>>;
 
-pub fn parse<'a>(arena: &'a Bump, input: &str, file: FileId) -> Result<&'a [Stmt<'a>], ErrorKind> {
+fn run_parser<'a, 'p, O>(
+    arena: &'a Bump,
+    input: &'p str,
+    file: FileId,
+    mut parser: impl Parser<Input<'a, &'p str>, O, PError<'a, &'p str>>,
+) -> Result<O, ErrorKind> {
     let input = LocatedSpan::new_extra(input, InputContext { area: arena, file });
-    match many0_in(nfo(stmt)).parse(input) {
+    match parser.parse(input) {
         Ok((i, v)) => {
             if !i.is_empty() {
                 Err(VerboseError {
@@ -305,7 +311,7 @@ pub fn parse<'a>(arena: &'a Bump, input: &str, file: FileId) -> Result<&'a [Stmt
                     )],
                 })
             } else {
-                Ok(v.into_bump_slice())
+                Ok(v)
             }
         }
         Err(e) => match e.map(|v| VerboseError {
@@ -322,15 +328,27 @@ pub fn parse<'a>(arena: &'a Bump, input: &str, file: FileId) -> Result<&'a [Stmt
         },
     }
 }
+
+pub fn parse<'a>(arena: &'a Bump, input: &str, file: FileId) -> Result<&'a [Stmt<'a>], ErrorKind> {
+    run_parser(
+        arena,
+        input,
+        file,
+        many0_in(nfo(stmt)).map(|stmts| stmts.into_bump_slice()),
+    )
+}
 #[cfg(test)]
 mod tests {
     use bumpalo::Bump;
     use codespan::Files;
+    use nom::Parser;
 
     use crate::{
         frontend::ast::{OpCode, Stmt},
         ir::IrNode,
     };
+
+    use super::{Input, PError};
 
     struct TestCtx {
         arena: Bump,
@@ -345,6 +363,15 @@ mod tests {
             let id = db.add("test", input);
             super::parse(&self.arena, input, id)
         }
+        fn run_parser<'a, 'p, O>(
+            &'a self,
+            input: &'p str,
+            parser: impl Parser<Input<'a, &'p str>, O, PError<'a, &'p str>>,
+        ) -> Result<O, super::ErrorKind> {
+            let mut db = Files::new();
+            let id = db.add("test", input);
+            super::run_parser(&self.arena, input, id, parser)
+        }
     }
 
     #[test]
@@ -358,5 +385,11 @@ mod tests {
         let operands = mov.operands.get().0;
         assert_eq!(operands.len(), 2);
         assert_eq!(operands[0].get().try_as_var().unwrap().get(), "r1");
+    }
+    #[test]
+    fn parse_ident_with_num() {
+        let ctx = TestCtx::new();
+        let res = ctx.run_parser("r1", super::ident).unwrap();
+        assert_eq!(res, "r1");
     }
 }

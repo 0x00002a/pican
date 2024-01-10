@@ -10,6 +10,12 @@ impl<'a> Ident<'a> {
     }
 }
 
+impl<'a> std::cmp::PartialEq<&str> for Ident<'a> {
+    fn eq(&self, other: &&str) -> bool {
+        self.0.eq(*other)
+    }
+}
+
 impl<'a> std::cmp::PartialEq<str> for Ident<'a> {
     fn eq(&self, other: &str) -> bool {
         self.0.eq(other)
