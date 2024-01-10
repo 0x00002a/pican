@@ -1,28 +1,24 @@
-use pican_core::{alloc::Bump, context::PicanContext, ir::IrNode, PError, PResult};
+use pican_core::{
+    alloc::Bump,
+    context::{IrContext, PicanContext},
+    ir::IrNode,
+    PError, PResult,
+};
 
 use pican_pir as pir;
 
 use crate::ast;
 
-#[derive(Default)]
-pub struct PirContext {
-    arena: Bump,
+pub trait FrontendToPirCtx {
+    fn lower<'a>(&'a self, ctx: &PicanContext, ir: &[ast::Stmt]) -> pir::ir::Module<'a>;
 }
-
-impl PirContext {
-    pub fn new() -> Self {
-        Self::default()
-    }
-    pub fn lower<'a, 'b>(
-        &'a self,
-        ctx: &PicanContext,
-        ir: &'b [ast::Stmt<'b>],
-    ) -> PResult<pir::ir::Module<'a>, ()> {
-        let mut l = lowering::PirLower::new(&self.arena, ctx);
+impl FrontendToPirCtx for IrContext {
+    fn lower<'a>(&'a self, ctx: &PicanContext, ir: &[ast::Stmt]) -> pir::ir::Module<'a> {
+        let mut l = lowering::PirLower::new(self.arena(), ctx);
         for stmt in ir {
-            l.lower_toplevel_stmt(*stmt.get());
+            let _ = l.lower_toplevel_stmt(*stmt.get());
         }
-        todo!();
+        l.build_module()
     }
 }
 
@@ -69,10 +65,13 @@ mod lowering {
             }
             Ok(())
         }
-        pub fn lower_toplevel_stmt(
-            &mut self,
-            stmt: Statement<'a>,
-        ) -> Result<(), FatalErrorEmitted> {
+        pub fn build_module(self) -> pir::Module<'a> {
+            pir::Module {
+                entry_points: self.entry_points.into_bump_slice(),
+                bindings: self.bindings,
+            }
+        }
+        pub fn lower_toplevel_stmt(&mut self, stmt: Statement) -> Result<(), FatalErrorEmitted> {
             match stmt {
                 Statement::EntryPoint(ep) => {
                     let pt = self.lower(ep)?;
