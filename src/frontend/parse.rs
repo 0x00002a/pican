@@ -6,7 +6,7 @@ use crate::ir::{IrNode, Span};
 use bumpalo::Bump;
 use codespan::{FileId, Location};
 use nom::bytes::complete::take_until;
-use nom::character::complete as nmc;
+use nom::character::complete::{self as nmc, space1};
 use nom::error::context;
 use nom::multi::{fold_many0, many0, many0_count, many1, many_till};
 use nom::sequence::{pair, preceded, separated_pair, terminated, tuple};
@@ -158,10 +158,10 @@ where
     <I as InputTakeAtPosition>::Item: AsChar + Clone,
 {
     move |mut i| {
-        for (tag, val) in tags {
-            let (i_r, r) = ncm::opt(tkn::<'p, I, _, Error>(*tag)).parse(i)?;
+        for (t, val) in tags {
+            let (i_r, r) = ncm::opt(tag(*t)).parse(i)?;
             if r.is_some() {
-                return Ok((i, *val));
+                return Ok((i_r, *val));
             } else {
                 i = i_r;
             }
@@ -262,18 +262,22 @@ fn entry_point<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, FunctionDecl<'a>> 
 
 fn opcode<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OpCode> {
     use OpCode::*;
-    penum(&[("mov", Mov), ("dp4", Dp4), ("min", Min), ("mad", Mad)]).parse(i)
+    penum(&[("mov", Mov), ("dp4", Dp4), ("min", Min), ("mad", Mad)])
+        .ctx("opcode")
+        .parse(i)
+}
+
+fn operands<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operands<'a>> {
+    fn operand<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operand<'a>> {
+        nfo(ident).map(Operand::Var).parse(i)
+    }
+    let (i, ops) = nom::multi::separated_list1(tkn(","), nfo(operand))(i)?;
+    let ops = i.extra.area.alloc_slice_copy(&ops);
+    Ok((i, Operands(ops)))
 }
 fn op<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Op<'a>> {
-    fn operands<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operands<'a>> {
-        fn operand<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operand<'a>> {
-            nfo(ident).map(Operand::Var).parse(i)
-        }
-        let (i, ops) = nom::multi::separated_list1(tkn(","), nfo(operand))(i)?;
-        let ops = i.extra.area.alloc_slice_copy(&ops);
-        Ok((i, Operands(ops)))
-    }
     let (i, code) = nfo(opcode.ctx("opcode"))(i)?;
+    let (i, _) = space1(i)?;
     let (i, operands) = nfo(operands.req("missing operands to operation"))(i)?;
     Ok((
         i,
@@ -341,7 +345,12 @@ pub fn parse<'a>(arena: &'a Bump, input: &str, file: FileId) -> Result<&'a [Stmt
 mod tests {
     use bumpalo::Bump;
     use codespan::Files;
-    use nom::Parser;
+    use nom::{
+        bytes::complete::tag,
+        character::complete::{satisfy, space1},
+        combinator::eof,
+        Parser,
+    };
 
     use crate::{
         frontend::ast::{OpCode, Stmt},
@@ -377,10 +386,7 @@ mod tests {
     #[test]
     fn parse_mov_op() {
         let ctx = TestCtx::new();
-        let res = ctx.parse("mov r1, r2").unwrap();
-        assert_eq!(res.len(), 1);
-        let stmt = res[0];
-        let mov = stmt.into_inner().try_into_op().unwrap().into_inner();
+        let mov = ctx.run_parser("mov r1, r2", super::op).unwrap();
         assert_eq!(mov.opcode.get(), &OpCode::Mov);
         let operands = mov.operands.get().0;
         assert_eq!(operands.len(), 2);
@@ -391,5 +397,37 @@ mod tests {
         let ctx = TestCtx::new();
         let res = ctx.run_parser("r1", super::ident).unwrap();
         assert_eq!(res, "r1");
+    }
+
+    #[test]
+    fn parse_operands() {
+        let ctx = TestCtx::new();
+        let res = ctx.run_parser("r1, r2", super::operands).unwrap();
+        assert_eq!(res.0.len(), 2);
+        assert_eq!(res.0[0].get().try_as_var().unwrap().get(), "r1");
+        assert_eq!(res.0[1].get().try_as_var().unwrap().get(), "r2");
+    }
+    #[test]
+    fn opcode_parser_doesnt_eat_space_before() {
+        let ctx = TestCtx::new();
+        let res = ctx.run_parser(" mov", super::opcode);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn opcode_parser_doesnt_eat_space_after() {
+        let ctx = TestCtx::new();
+        let _ = ctx
+            .run_parser(
+                "mov ",
+                super::opcode.and(
+                    satisfy(|ch| {
+                        assert_eq!(ch, ' ');
+                        true
+                    })
+                    .and(eof),
+                ),
+            )
+            .unwrap();
     }
 }
