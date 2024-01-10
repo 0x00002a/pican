@@ -9,4 +9,5 @@ edition = "2021"
 serde = { version = "1.0.195", features = ["derive"] }
 typesum = "0.2.0"
 
-pican_core = { path = "../pican_core" }
+pican_core = { }
+pican_pir_macros = {}

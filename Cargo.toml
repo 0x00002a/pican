@@ -1,5 +1,8 @@
 [workspace]
 members = ["crates/*"]
 
+[patch.crates-io]
+pican_core = { path = "./crates/pican_core" }
+pican_pir_macros = { path = "./crates/pican_pir/macros" }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

@@ -10,11 +10,9 @@ pub struct Module<'a> {
     pub bindings: Bindings<'a>,
 }
 
-
 pub struct Alias<'a> {
     pub kind: IrNode<AliasKind>,
     pub from: IrNode<Ident<'a>>,
-    pub to:
 }
 
 pub enum AliasKind {
@@ -27,10 +25,7 @@ pub struct EntryPoint<'a> {
     pub name: IrNode<Ident<'a>>,
     pub ops: IrNode<&'a [IrNode<Op<'a>>]>,
 }
-pub enum Op<'a> {
-
-}
-
+pub enum Op<'a> {}
 
 pub enum BinOpKind {
     Mov,
@@ -47,14 +42,11 @@ pub struct WideOperand {
     pub relative_address: usize,
 }
 
-pub enum DestOperation<'a> {
-
-}
+pub enum DestOperation<'a> {}
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
 pub enum SourceOperand<'a> {
     Wide(WideOperand),
     /// Only supports input and scratch registers
     Narrow,
-
 }
