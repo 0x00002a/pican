@@ -293,7 +293,11 @@ fn opcode<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, OpCode> {
 
 fn operands<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operands<'a>> {
     fn operand<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operand<'a>> {
-        nfo(ident).map(Operand::Var).parse(i)
+        branch::alt((
+            nfo(register).map(Operand::Register),
+            nfo(ident).map(Operand::Var),
+        ))
+        .parse(i)
     }
     let (i, ops) = nom::multi::separated_list1(tkn(","), nfo(operand))(i)?;
     let ops = i.extra.area.alloc_slice_copy(&ops);
@@ -413,11 +417,11 @@ mod tests {
     #[test]
     fn parse_mov_op() {
         let ctx = TestCtx::new();
-        let mov = ctx.run_parser("mov r1, r2", super::op).unwrap();
+        let mov = ctx.run_parser("mov dst, r2", super::op).unwrap();
         assert_eq!(mov.opcode.get(), &OpCode::Mov);
         let operands = mov.operands.get().0;
         assert_eq!(operands.len(), 2);
-        assert_eq!(operands[0].get().try_as_var().unwrap().get(), "r1");
+        assert_eq!(operands[0].get().try_as_var().unwrap().get(), "dst");
     }
     #[test]
     fn parse_ident_with_num() {
@@ -429,10 +433,10 @@ mod tests {
     #[test]
     fn parse_operands() {
         let ctx = TestCtx::new();
-        let res = ctx.run_parser("r1, r2", super::operands).unwrap();
+        let res = ctx.run_parser("smth, smth2", super::operands).unwrap();
         assert_eq!(res.0.len(), 2);
-        assert_eq!(res.0[0].get().try_as_var().unwrap().get(), "r1");
-        assert_eq!(res.0[1].get().try_as_var().unwrap().get(), "r2");
+        assert_eq!(res.0[0].get().try_as_var().unwrap().get(), "smth");
+        assert_eq!(res.0[1].get().try_as_var().unwrap().get(), "smth2");
     }
     #[test]
     fn opcode_parser_doesnt_eat_space_before() {
