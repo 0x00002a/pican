@@ -1,4 +1,1 @@
-
-pub enum Statement {
-    Section(Section),
-}
+pub enum Statement {}

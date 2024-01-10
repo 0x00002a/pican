@@ -239,8 +239,7 @@ pub(super) mod comb {
         let (i, _) = ncm::peek(ident_char)(i)?;
         let (i, word) = many1(ident_char.or(nmc::satisfy(|ch| ch.is_dec_digit())))(i)?;
         let word = bumpalo::collections::String::from_iter_in(word.into_iter(), i.extra.area);
-        // unwrap: it has to be valid utf8 or we couldn't have parsed it
-        Ok((i, word.as_str()))
+        Ok((i, word.into_bump_str()))
     }
     fn ident<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Ident<'a>> {
         let keywords = or_kw! {
@@ -267,7 +266,7 @@ pub(super) mod comb {
     fn entry_point<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, FunctionDecl<'a>> {
         pub fn block<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Block<'a>> {
             let (i, info) = nfo(many_till(nfo(stmt), tkn(".end").ctx("block end")))(i)?;
-            let statements = info.map(|(val, _)| i.extra.alloc_slice(&val).as_ref());
+            let statements = info.map(|(val, _)| i.extra.alloc_slice(&val)).map(|v| &*v);
             Ok((i, Block { statements }))
         }
 
@@ -322,7 +321,7 @@ pub fn parse<'a>(arena: &'a Bump, input: &str, file: FileId) -> Result<&'a [Stmt
                     )],
                 })
             } else {
-                Ok(v.as_slice())
+                Ok(v.into_bump_slice())
             }
         }
         Err(e) => match e.map(|v| VerboseError {
