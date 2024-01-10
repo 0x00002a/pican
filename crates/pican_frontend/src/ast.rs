@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use pican_core::register::Register;
 use serde::{Deserialize, Serialize};
 
 use pican_core::ir::{Float, IrNode};
@@ -48,10 +49,11 @@ struct RegisterBind<'a> {
     pub name: IrNode<Ident<'a>>,
 }
 
-sum_node! {
-    pub enum Operand {
-        Var(Ident)
-    }
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[typesum::sumtype]
+pub enum Operand<'a> {
+    Var(IrNode<Ident<'a>>),
+    Register(IrNode<Register>),
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]

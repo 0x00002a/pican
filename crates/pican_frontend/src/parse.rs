@@ -367,6 +367,8 @@ pub fn parse<'a>(arena: &'a Bump, input: &str, file: FileId) -> Result<&'a [Stmt
 }
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use nom::{
         bytes::complete::tag,
         character::complete::{satisfy, space1},
@@ -437,6 +439,21 @@ mod tests {
         let ctx = TestCtx::new();
         let res = ctx.run_parser(" mov", super::opcode);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn operands_can_be_registers() {
+        let ctx = TestCtx::new();
+        let res = ctx.run_parser("v0, r1", super::operands).unwrap();
+        assert_eq!(
+            res.0[0].get().try_as_register().unwrap().get(),
+            &Register::from_str("v0").unwrap(),
+        );
+
+        assert_eq!(
+            res.0[1].get().try_as_register().unwrap().get(),
+            &Register::from_str("r1").unwrap(),
+        );
     }
     #[test]
     fn parse_registers() {

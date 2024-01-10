@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, IntoEnumIterator};
 
@@ -13,6 +15,7 @@ pub enum RegisterKind {
     BoolUniform,
 }
 
+#[derive(Clone, Copy)]
 struct RegisterKindInfo {
     num: u8,
     kind: RegisterKind,
@@ -56,6 +59,7 @@ impl RegisterKind {
     /// Check if register can be used as a given type
     ///
     /// ```
+    /// use pican_core::register::{RegisterType, RegisterKind};
     /// assert!(RegisterKind::Input.is_type(RegisterType::Input));
     /// assert!(!RegisterKind::Output.is_type(RegisterType::Input));
     /// assert!(RegisterKind::Scratch.is_type(RegisterType::Input));
@@ -99,7 +103,52 @@ pub struct Register {
     pub index: usize,
 }
 
-pub enum ParseRegisterError {}
+#[derive(thiserror::Error, Debug)]
+pub enum ParseRegisterKindError {
+    #[error("input is the empty string")]
+    EmptyInput,
+    #[error("unrecognised prefix '{0}'")]
+    UnrecognisedPrefix(char),
+}
+#[derive(thiserror::Error, Debug)]
+pub enum ParseRegisterError {
+    #[error("input is too short")]
+    TooShort,
+    #[error(transparent)]
+    Kind(#[from] ParseRegisterKindError),
+    #[error("index is too large for this register kind")]
+    IndexOutOfBounds,
+    #[error(transparent)]
+    Index(<usize as FromStr>::Err),
+}
+impl FromStr for RegisterKind {
+    type Err = ParseRegisterKindError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            return Err(ParseRegisterKindError::EmptyInput);
+        }
+        let prefix = s.chars().next().unwrap();
+        REGISTER_INFOS
+            .iter()
+            .find(|i| i.prefix == prefix)
+            .map(|i| i.kind)
+            .ok_or(ParseRegisterKindError::UnrecognisedPrefix(prefix))
+    }
+}
+
+impl FromStr for Register {
+    type Err = ParseRegisterError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() < 2 {
+            return Err(ParseRegisterError::TooShort);
+        }
+        let kind = s.parse()?;
+        let index = s[1..].parse().map_err(ParseRegisterError::Index)?;
+        Ok(Register { kind, index })
+    }
+}
 
 impl Register {
     /// Create a new registers
