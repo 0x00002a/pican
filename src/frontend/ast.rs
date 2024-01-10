@@ -9,7 +9,7 @@ macro_rules! sum_node {
         $($variant:ident ($inner:ident)),*
     }) => {
         #[typesum::sumtype]
-        #[derive(Clone, Copy, PartialEq, Eq, Serialize)]
+        #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
         $vi enum $name <'a> {
             $($variant ( IrNode<$inner <'a>> )),*
         }
@@ -26,7 +26,7 @@ pub enum Statement {
 }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
 pub struct ConstantDecl<'a> {
     pub name: IrNode<Ident<'a>>,
     pub values: IrNode<&'a [IrNode<Float>]>,
@@ -51,10 +51,10 @@ sum_node! {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
 pub struct Operands<'a>(pub &'a [IrNode<Operand<'a>>]);
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub enum OpCode {
     Dp4,
     Mov,
@@ -62,11 +62,13 @@ pub enum OpCode {
     Min,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
 pub struct Op<'a> {
     pub opcode: IrNode<OpCode>,
     pub operands: IrNode<Operands<'a>>,
 }
+
+pub use crate::ir::Ident;
 
 pub type Stmt<'a> = IrNode<Statement<'a>>;
 
@@ -74,9 +76,6 @@ pub type Stmt<'a> = IrNode<Statement<'a>>;
 pub struct Comment<'a> {
     pub content: IrNode<&'a str>,
 }
-
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
-pub struct Ident<'a>(&'a str);
 
 /// A section
 ///
@@ -89,5 +88,5 @@ pub struct FunctionDecl<'a> {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
 pub struct Block<'a> {
-    pub statements: IrNode<&'a [IrNode<Stmt<'a>>]>,
+    pub statements: IrNode<&'a [Stmt<'a>]>,
 }

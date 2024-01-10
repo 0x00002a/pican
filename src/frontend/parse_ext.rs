@@ -67,6 +67,7 @@ where
 }
 
 pub trait ParserExt<I, O, E>: Parser<I, O, E> + Sized {
+    /// Add context to parser, used in errors
     fn ctx(self, lbl: &'static str) -> WithContext<Self>
     where
         I: Clone,
@@ -77,6 +78,7 @@ pub trait ParserExt<I, O, E>: Parser<I, O, E> + Sized {
         }
     }
 
+    /// Require this parser to succeed and provide context for if it fails
     fn req(self, msg: &'static str) -> WithContext<Cut<Self>>
     where
         E: ParseError<I>,
