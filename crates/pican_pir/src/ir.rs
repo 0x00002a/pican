@@ -10,22 +10,10 @@ pub struct Module<'a> {
     pub bindings: Bindings<'a>,
 }
 
-pub struct Alias<'a> {
-    pub kind: IrNode<AliasKind>,
-    pub from: IrNode<Ident<'a>>,
-}
-
-pub enum AliasKind {
-    Output,
-    Input,
-    Var,
-}
-
 pub struct EntryPoint<'a> {
     pub name: IrNode<Ident<'a>>,
     pub ops: IrNode<&'a [IrNode<Op<'a>>]>,
 }
-pub enum Op<'a> {}
 
 pub enum BinOpKind {
     Mov,

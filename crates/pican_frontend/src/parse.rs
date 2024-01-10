@@ -23,6 +23,7 @@ use nom_locate::LocatedSpan;
 use pican_core::alloc::Bump;
 use pican_core::ir::Float;
 use pican_core::ir::{IrNode, Span};
+use pican_core::register::{Register, RegisterKind};
 use pican_core::span::{FileId, Location};
 use std::rc::Rc;
 
@@ -226,6 +227,24 @@ fn ident_word<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, &'a str> {
     let word = pican_core::alloc::collections::String::from_iter_in(word.into_iter(), i.extra.area);
     Ok((i, word.into_bump_str()))
 }
+fn register<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, Register> {
+    for reg_kind in RegisterKind::all() {
+        let p = nmc::char(reg_kind.prefix()).ignore_then(nmc::u32.req("register index"));
+        let (i_r, r) = ncm::opt(p)(i)?;
+        i = i_r;
+        if let Some(index) = r {
+            return Ok((
+                i,
+                Register {
+                    kind: reg_kind,
+                    index: index.try_into().expect("index too large for usize"),
+                },
+            ));
+        }
+    }
+    ncm::fail(i)
+}
+
 pub fn ident<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Ident<'a>> {
     let keywords = or_kw! {
         mov, dp4
@@ -354,9 +373,12 @@ mod tests {
         combinator::eof,
         Parser,
     };
-    use pican_core::alloc::Bump;
     use pican_core::ir::IrNode;
     use pican_core::span::Files;
+    use pican_core::{
+        alloc::Bump,
+        register::{Register, RegisterKind},
+    };
 
     use crate::ast::{OpCode, Stmt};
 
@@ -415,6 +437,12 @@ mod tests {
         let ctx = TestCtx::new();
         let res = ctx.run_parser(" mov", super::opcode);
         assert!(res.is_err());
+    }
+    #[test]
+    fn parse_registers() {
+        let ctx = TestCtx::new();
+        let res = ctx.run_parser("v0", super::register).unwrap();
+        assert_eq!(res, Register::new(RegisterKind::Input, 0));
     }
 
     #[test]
