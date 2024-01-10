@@ -22,7 +22,7 @@ pub struct EntryPoint<'a> {
 
 pub struct Op<'a> {
     pub opcode: IrNode<OpCode>,
-    pub operands: ArrayVec<IrNode<Operand<'a>>, 4>,
+    pub operands: IrNode<ArrayVec<IrNode<Operand<'a>>, 4>>,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]

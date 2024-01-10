@@ -1,17 +1,19 @@
 use std::collections::HashMap;
 
 use pican_core::{
-    ir::{Ident, IrNode},
+    ir::{Ident, IrNode, Span},
     register::Register,
 };
 
+#[derive(Debug, Clone, Copy)]
 struct Binding<'a> {
     name: IrNode<Ident<'a>>,
-    value: BindingValue<'a>,
+    value: IrNode<BindingValue<'a>>,
 }
 
+#[derive(Debug, Default)]
 pub struct Bindings<'a> {
-    tbl: HashMap<IrNode<Ident<'a>>, BindingValue<'a>>,
+    tbl: HashMap<Ident<'a>, Binding<'a>>,
 }
 
 impl<'a> Bindings<'a> {
@@ -19,23 +21,39 @@ impl<'a> Bindings<'a> {
     ///
     /// # Panics
     /// If the `name` already has a binding set
-    pub fn define(&mut self, name: IrNode<Ident<'a>>, val: BindingValue<'a>) {
-        let r = self.tbl.insert(name, val);
+    pub fn define(&mut self, name: IrNode<Ident<'a>>, val: IrNode<impl Into<BindingValue<'a>>>) {
+        let r = self.tbl.insert(
+            name.into_inner(),
+            Binding {
+                name,
+                value: val.map(Into::into),
+            },
+        );
         assert!(r.is_none(), "a binding already exists for {name:#?}");
     }
-    pub fn lookup(&self, name: IrNode<Ident<'a>>) -> Option<BindingValue<'a>> {
-        self.tbl.get(&name).copied()
+    pub fn previous_definition<'b>(&self, name: IrNode<Ident<'b>>) -> Option<IrNode<Ident<'a>>> {
+        self.tbl.get(name.get()).map(|Binding { name, .. }| *name)
+    }
+
+    pub fn lookup(&self, name: IrNode<Ident>) -> Option<IrNode<BindingValue<'a>>> {
+        if let Some(prev) = self.previous_definition(name) {
+            assert_eq!(
+                prev, name,
+                "an identifier different with a conflicting name already existed when doing lookup"
+            );
+        }
+        self.tbl.get(name.get()).map(|b| b.value)
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
+#[typesum::sumtype(only = from)]
 pub enum BindingValue<'a> {
-    Constant(),
     SwizzleAlias(SwizzleAlias<'a>),
     Register(Register),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct SwizzleAlias<'a> {
     pub target: IrNode<Ident<'a>>,
 }

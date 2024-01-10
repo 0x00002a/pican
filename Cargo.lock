@@ -128,18 +128,22 @@ version = "0.1.0"
 dependencies = [
  "bumpalo",
  "codespan",
+ "codespan-reporting",
  "serde",
  "strum",
  "thiserror",
+ "typed-arena",
 ]
 
 [[package]]
 name = "pican_frontend"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "nom",
  "nom_locate",
  "pican_core",
+ "pican_pir",
  "serde",
  "typesum",
 ]
@@ -297,6 +301,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "typed-arena"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6af6ae20167a9ece4bcb41af5b80f8a1f1df981f6391189ce00fd257af04126a"
 
 [[package]]
 name = "typesum"

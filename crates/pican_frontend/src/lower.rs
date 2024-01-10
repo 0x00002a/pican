@@ -1,0 +1,199 @@
+use pican_core::{alloc::Bump, context::PicanContext, ir::IrNode, PError, PResult};
+
+use pican_pir as pir;
+
+use crate::ast;
+
+#[derive(Default)]
+pub struct PirContext {
+    arena: Bump,
+}
+
+impl PirContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn lower<'a, 'b>(
+        &'a self,
+        ctx: &PicanContext,
+        ir: &'b [ast::Stmt<'b>],
+    ) -> PResult<pir::ir::Module<'a>, ()> {
+        let mut l = lowering::PirLower::new(&self.arena, ctx);
+        for stmt in ir {
+            l.lower_toplevel_stmt(*stmt.get());
+        }
+        todo!();
+    }
+}
+
+mod lowering {
+    use arrayvec::ArrayVec;
+    use pican_core::{
+        alloc::{Bump, BumpVec},
+        context::PicanContext,
+        diagnostics::{DiagnosticBuilder, FatalErrorEmitted},
+        ir::{Ident, IrNode},
+        register::Register,
+        PResult,
+    };
+
+    use crate::ast::{FunctionDecl, Op, Operand, Operands, Statement, Stmt};
+    use pican_pir::bindings as pib;
+    use pican_pir::ir as pir;
+
+    pub struct PirLower<'a, 'c> {
+        alloc: &'a Bump,
+        ctx: &'c PicanContext,
+        bindings: pib::Bindings<'a>,
+        entry_points: BumpVec<'a, IrNode<pir::EntryPoint<'a>>>,
+    }
+    impl<'a, 'c> PirLower<'a, 'c> {
+        pub fn new(alloc: &'a Bump, ctx: &'c PicanContext) -> Self {
+            Self {
+                alloc,
+                ctx,
+                bindings: Default::default(),
+                entry_points: BumpVec::new_in(alloc),
+            }
+        }
+
+        fn check_non_aliased(&self, var: IrNode<Ident>) -> Result<(), FatalErrorEmitted> {
+            if let Some(id) = self.bindings.previous_definition(var) {
+                return self.ctx.diag.fatal(
+                    DiagnosticBuilder::error()
+                        .at(&var)
+                        .primary(format!("identifier conflicts with existing one"))
+                        .note(&id, "identifier previously bound here")
+                        .build(),
+                );
+            }
+            Ok(())
+        }
+        pub fn lower_toplevel_stmt(
+            &mut self,
+            stmt: Statement<'a>,
+        ) -> Result<(), FatalErrorEmitted> {
+            match stmt {
+                Statement::EntryPoint(ep) => {
+                    let pt = self.lower(ep)?;
+                    self.entry_points.push(pt);
+                    Ok(())
+                }
+                Statement::Comment(_) => todo!(),
+                Statement::Op(o) => self.ctx.diag.fatal(
+                    DiagnosticBuilder::error()
+                        .at(&o)
+                        .primary("cannot have operations outside of proc's")
+                        .build(),
+                ),
+                Statement::RegisterBind(b) => {
+                    // check its not aliases _before_ we lower it as we don't want to put
+                    // it in the arena if its not used
+                    self.check_non_aliased(b.get().name)?;
+                    let name = b.get().name.lower(self)?;
+                    self.bindings.define(name, b.get().reg);
+                    Ok(())
+                }
+                Statement::Uniform(_) => todo!(),
+                Statement::Constant(_) => todo!(),
+            }
+        }
+        fn lower<L: Lower>(&self, t: L) -> Result<L::Pir<'a>, FatalErrorEmitted> {
+            t.lower(self)
+        }
+    }
+    trait Lower {
+        type Pir<'a>;
+        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted>;
+    }
+    impl<'b> Lower for Ident<'b> {
+        type Pir<'a> = Ident<'a>;
+
+        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            Ok(self.copy_to(ctx.alloc))
+        }
+    }
+    impl<T: Lower> Lower for IrNode<T> {
+        type Pir<'a> = IrNode<T::Pir<'a>>;
+
+        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            self.map(|i| i.lower(ctx)).transpose()
+        }
+    }
+    impl Lower for Operand<'_> {
+        type Pir<'a> = pir::Operand<'a>;
+
+        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            let r = match self {
+                Operand::Var(v) => pir::Operand::Var(ctx.lower(v)?),
+                Operand::Register(r) => pir::Operand::Register(r),
+            };
+            Ok(r)
+        }
+    }
+    impl Lower for Operands<'_> {
+        type Pir<'a> = ArrayVec<IrNode<pir::Operand<'a>>, 4>;
+
+        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            if self.0.len() > 4 {
+                return ctx.ctx.diag.fatal(
+                    DiagnosticBuilder::error()
+                        .at(&self.0[4])
+                        .primary("opcodes can have a maximum of 4 arguments")
+                        .build(),
+                );
+            }
+            let mut ops = ArrayVec::new();
+            for op in self.0 {
+                ops.push(ctx.lower(op.copied())?);
+            }
+            Ok(ops)
+        }
+    }
+    impl Lower for Op<'_> {
+        type Pir<'a> = pir::Op<'a>;
+
+        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            let opcode = self.opcode;
+            let operands = ctx.lower(self.operands)?;
+            Ok(pir::Op { opcode, operands })
+        }
+    }
+    impl Lower for FunctionDecl<'_> {
+        type Pir<'a> = pir::EntryPoint<'a>;
+
+        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            let name = ctx.lower(self.name)?;
+            let ops = self
+                .block
+                .map(|b| {
+                    b.statements.map(|stmts| {
+                        let mut ops = BumpVec::new_in(ctx.alloc);
+                        for stmt in stmts {
+                            let Ok(op) = stmt
+                                .map(|st| {
+                                    let Statement::Op(op) = st else {
+                                        return ctx.ctx.diag.fatal(
+                                    DiagnosticBuilder::error()
+                                        .at(stmt)
+                                        .primary("proc's are only allowed to constain operations")
+                                        .build(),
+                                );
+                                    };
+                                    ctx.lower(op)
+                                })
+                                .transpose()
+                            else {
+                                continue;
+                            };
+                            ops.push(op.concat());
+                        }
+                        ops
+                    })
+                })
+                .concat();
+            let ops = ops.map(|v| v.into_bump_slice());
+            Ok(pir::EntryPoint { name, ops })
+        }
+    }
+}

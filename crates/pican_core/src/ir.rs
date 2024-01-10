@@ -1,3 +1,6 @@
+use std::borrow::Borrow;
+
+use bumpalo::Bump;
 use codespan::FileId;
 use serde::{Deserialize, Serialize};
 
@@ -7,6 +10,9 @@ pub struct Ident<'a>(&'a str);
 impl<'a> Ident<'a> {
     pub fn new(val: &'a str) -> Self {
         Self(val)
+    }
+    pub fn copy_to(self, to: &Bump) -> Ident<'_> {
+        Ident(to.alloc_str(self.0))
     }
 }
 
@@ -56,6 +62,16 @@ impl Span {
             file,
         }
     }
+    pub fn merge(self, other: Span) -> Self {
+        assert_eq!(
+            self.file, other.file,
+            "cannot merge spans from different files"
+        );
+        Self {
+            file: self.file,
+            span: self.span.merge(other.span),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, Serialize, Deserialize)]
@@ -68,6 +84,11 @@ impl<T> IrNode<T> {
     pub fn new(node: T, span: Span) -> Self {
         Self { node, span }
     }
+
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
     pub fn map<To>(self, f: impl FnOnce(T) -> To) -> IrNode<To> {
         IrNode {
             node: f(self.node),
@@ -100,6 +121,12 @@ impl<T> IrNode<T> {
     pub fn into_inner(self) -> T {
         self.node
     }
+    pub fn copied(self) -> IrNode<T>
+    where
+        T: Copy,
+    {
+        self.map(|v| v)
+    }
 }
 
 impl<T> AsRef<T> for IrNode<T> {
@@ -110,5 +137,27 @@ impl<T> AsRef<T> for IrNode<T> {
 impl<T> AsMut<T> for IrNode<T> {
     fn as_mut(&mut self) -> &mut T {
         self.get_mut()
+    }
+}
+
+impl<T, E> IrNode<std::result::Result<T, E>> {
+    pub fn transpose(self) -> std::result::Result<IrNode<T>, E> {
+        let span = self.span;
+        match self.node {
+            Ok(node) => Ok(IrNode { node, span }),
+            Err(e) => Err(e),
+        }
+    }
+}
+impl<T> IrNode<IrNode<T>> {
+    /// Collapse nested `IrNode`
+    ///
+    /// # Panics
+    /// If the node's span different files
+    pub fn concat(self) -> IrNode<T> {
+        IrNode {
+            node: self.node.node,
+            span: self.span.merge(self.node.span),
+        }
     }
 }

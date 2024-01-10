@@ -12,3 +12,5 @@ nom_locate = "4.2.0"
 typesum = "0.2.0"
 
 pican_core = { }
+pican_pir = { }
+arrayvec = "0.7.4"

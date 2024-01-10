@@ -44,8 +44,8 @@ pub struct UniformDecl<'a> {
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
-struct RegisterBind<'a> {
-    pub reg: IrNode<Ident<'a>>,
+pub struct RegisterBind<'a> {
+    pub reg: IrNode<Register>,
     pub name: IrNode<Ident<'a>>,
 }
 

@@ -269,6 +269,7 @@ fn float<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Float> {
 }
 fn entry_point<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, FunctionDecl<'a>> {
     pub fn block<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Block<'a>> {
+        let (i, _) = space(i)?; // consume whitespace so its part of our span and not the first statement's
         let (i, info) = nfo(many_till(nfo(stmt), tkn(".end").ctx("block end")))(i)?;
         let statements = info.map(|(val, _)| i.extra.alloc_slice(&val)).map(|v| &*v);
         Ok((i, Block { statements }))
