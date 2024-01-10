@@ -1,6 +1,11 @@
+use arrayvec::ArrayVec;
 use serde::Serialize;
 
-use pican_core::ir::{Ident, IrNode};
+use pican_core::{
+    ir::{Ident, IrNode},
+    ops::{OpCode, OperandKind},
+    register::Register,
+};
 
 use super::bindings::Bindings;
 
@@ -15,26 +20,20 @@ pub struct EntryPoint<'a> {
     pub ops: IrNode<&'a [IrNode<Op<'a>>]>,
 }
 
-pub enum BinOpKind {
-    Mov,
+pub struct Op<'a> {
+    pub opcode: IrNode<OpCode>,
+    pub operands: ArrayVec<IrNode<Operand<'a>>, 4>,
 }
 
-pub struct BinOp<'a> {
-    pub kind: IrNode<BinOpKind>,
-    pub args: [IrNode<Operand<'a>>; 2],
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[typesum::sumtype]
+pub enum Operand<'a> {
+    Var(IrNode<Ident<'a>>),
+    Register(IrNode<Register>),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct WideOperand {
     /// The relative address of the input, e.g. uniform[1]
     pub relative_address: usize,
-}
-
-pub enum DestOperation<'a> {}
-
-#[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
-pub enum SourceOperand<'a> {
-    Wide(WideOperand),
-    /// Only supports input and scratch registers
-    Narrow,
 }
