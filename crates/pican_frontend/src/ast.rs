@@ -2,7 +2,9 @@ use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ir::{Float, IrNode};
+use pican_core::ir::{Float, IrNode};
+
+pub use pican_core::ir::Ident;
 
 macro_rules! sum_node {
     ($vi:vis enum $name:ident {
@@ -67,8 +69,6 @@ pub struct Op<'a> {
     pub opcode: IrNode<OpCode>,
     pub operands: IrNode<Operands<'a>>,
 }
-
-pub use crate::ir::Ident;
 
 pub type Stmt<'a> = IrNode<Statement<'a>>;
 

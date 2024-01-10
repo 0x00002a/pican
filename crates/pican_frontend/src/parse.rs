@@ -1,10 +1,6 @@
 use super::ast::Stmt;
-use crate::frontend::ast::{Block, FunctionDecl, Ident, Op, OpCode, Operand, Operands, Statement};
-use crate::frontend::parse_ext::ParserExt;
-use crate::ir::Float;
-use crate::ir::{IrNode, Span};
-use bumpalo::Bump;
-use codespan::{FileId, Location};
+use crate::ast::{Block, FunctionDecl, Ident, Op, OpCode, Operand, Operands, Statement};
+use crate::parse_ext::ParserExt;
 use nom::bytes::complete::take_until;
 use nom::character::complete::{self as nmc, space1};
 use nom::error::context;
@@ -24,11 +20,15 @@ use nom::{
 };
 use nom::{AsChar, Compare, InputLength, InputTake, InputTakeAtPosition};
 use nom_locate::LocatedSpan;
+use pican_core::alloc::Bump;
+use pican_core::ir::Float;
+use pican_core::ir::{IrNode, Span};
+use pican_core::span::{FileId, Location};
 use std::rc::Rc;
 
 #[derive(Clone, Copy)]
 struct InputContext<'a> {
-    area: &'a bumpalo::Bump,
+    area: &'a Bump,
     file: FileId,
 }
 impl<'a> InputContext<'a> {
@@ -128,12 +128,12 @@ where
 }
 pub fn many0_in<'a, T: Clone + InputLength, O, E: ParseError<Input<'a, T>>>(
     mut f: impl Parser<Input<'a, T>, O, E>,
-) -> impl Parser<Input<'a, T>, bumpalo::collections::Vec<'a, O>, E> {
+) -> impl Parser<Input<'a, T>, pican_core::alloc::collections::Vec<'a, O>, E> {
     move |i: Input<'a, T>| {
         let f = |i| f.parse(i);
         fold_many0(
             f,
-            || bumpalo::collections::Vec::new_in(i.extra.area),
+            || pican_core::alloc::collections::Vec::new_in(i.extra.area),
             |mut acc, item| {
                 acc.push(item);
                 acc
@@ -223,7 +223,7 @@ fn ident_word<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, &'a str> {
     }
     let (i, _) = ncm::peek(ident_char)(i)?;
     let (i, word) = many1(ident_char.or(nmc::satisfy(|ch| ch.is_dec_digit())))(i)?;
-    let word = bumpalo::collections::String::from_iter_in(word.into_iter(), i.extra.area);
+    let word = pican_core::alloc::collections::String::from_iter_in(word.into_iter(), i.extra.area);
     Ok((i, word.into_bump_str()))
 }
 pub fn ident<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Ident<'a>> {
@@ -289,13 +289,13 @@ fn op<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Op<'a>> {
 }
 
 pub type ErrorKind = nom::error::VerboseError<Span>;
-impl<'a, T> From<Input<'a, T>> for Span {
-    fn from(value: Input<'a, T>) -> Self {
-        value
-            .extra
-            .span(value.location_offset(), value.location_offset())
-    }
+
+fn input_span<'a, T>(value: Input<'a, T>) -> Span {
+    value
+        .extra
+        .span(value.location_offset(), value.location_offset())
 }
+
 type PError<'a, I> = VerboseError<Input<'a, I>>;
 
 fn run_parser<'a, 'p, O>(
@@ -310,7 +310,7 @@ fn run_parser<'a, 'p, O>(
             if !i.is_empty() {
                 Err(VerboseError {
                     errors: vec![(
-                        i.into(),
+                        input_span(i),
                         VerboseErrorKind::Context("didn't consume all input"),
                     )],
                 })
@@ -323,7 +323,7 @@ fn run_parser<'a, 'p, O>(
                 .errors
                 .into_iter()
                 //  .filter(|e| matches!(e.1, VerboseErrorKind::Context(_)))
-                .map(|i| (i.0.into(), i.1))
+                .map(|i| (input_span(i.0), i.1))
                 .collect(),
         }) {
             nom::Err::Error(e) => Err(e),
@@ -343,19 +343,17 @@ pub fn parse<'a>(arena: &'a Bump, input: &str, file: FileId) -> Result<&'a [Stmt
 }
 #[cfg(test)]
 mod tests {
-    use bumpalo::Bump;
-    use codespan::Files;
     use nom::{
         bytes::complete::tag,
         character::complete::{satisfy, space1},
         combinator::eof,
         Parser,
     };
+    use pican_core::alloc::Bump;
+    use pican_core::ir::IrNode;
+    use pican_core::span::Files;
 
-    use crate::{
-        frontend::ast::{OpCode, Stmt},
-        ir::IrNode,
-    };
+    use crate::ast::{OpCode, Stmt};
 
     use super::{Input, PError};
 

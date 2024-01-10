@@ -108,13 +108,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "pica-lsp"
+name = "pican_core"
 version = "0.1.0"
 dependencies = [
  "bumpalo",
  "codespan",
+ "serde",
+]
+
+[[package]]
+name = "pican_frontend"
+version = "0.1.0"
+dependencies = [
  "nom",
  "nom_locate",
+ "pican_core",
+ "serde",
+ "typesum",
+]
+
+[[package]]
+name = "pican_pir"
+version = "0.1.0"
+dependencies = [
+ "pican_core",
  "serde",
  "typesum",
 ]

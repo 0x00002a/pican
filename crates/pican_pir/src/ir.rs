@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::ir::{Ident, IrNode};
+use pican_core::ir::{Ident, IrNode};
 
 use super::bindings::Bindings;
 
@@ -31,9 +31,6 @@ pub enum Op<'a> {
 
 }
 
-pub struct Op<'a> {
-
-}
 
 pub enum BinOpKind {
     Mov,
