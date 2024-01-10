@@ -9,3 +9,4 @@ edition = "2021"
 bumpalo = { version = "3.13.0", features = ["collections"] }
 codespan = { version = "0.11.1", features = ["serde", "serialization"] }
 serde = { version = "1.0.195", features = ["derive"] }
+strum = { version = "0.25.0", features = ["derive"] }

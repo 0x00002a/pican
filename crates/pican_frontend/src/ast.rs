@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use pican_core::ir::{Float, IrNode};
 
 pub use pican_core::ir::Ident;
+pub use pican_core::ops::OpCode;
 
 macro_rules! sum_node {
     ($vi:vis enum $name:ident {
@@ -55,14 +56,6 @@ sum_node! {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
 pub struct Operands<'a>(pub &'a [IrNode<Operand<'a>>]);
-
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
-pub enum OpCode {
-    Dp4,
-    Mov,
-    Mad,
-    Min,
-}
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
 pub struct Op<'a> {

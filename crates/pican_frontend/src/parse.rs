@@ -260,11 +260,16 @@ fn entry_point<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, FunctionDecl<'a>> 
     Ok((i, FunctionDecl { name, block }))
 }
 
-fn opcode<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OpCode> {
-    use OpCode::*;
-    penum(&[("mov", Mov), ("dp4", Dp4), ("min", Min), ("mad", Mad)])
-        .ctx("opcode")
-        .parse(i)
+fn opcode<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, OpCode> {
+    for (name, val) in OpCode::variants_lookup() {
+        let (i_r, ok) = ncm::opt(tag(name))(i)?;
+        if ok.is_some() {
+            return Ok((i_r, val));
+        } else {
+            i = i_r
+        }
+    }
+    ncm::fail(i)
 }
 
 fn operands<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operands<'a>> {
