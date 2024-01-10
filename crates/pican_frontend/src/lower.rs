@@ -10,10 +10,18 @@ use pican_pir as pir;
 use crate::ast;
 
 pub trait FrontendToPirCtx {
-    fn lower<'a>(&'a self, ctx: &PicanContext, ir: &[ast::Stmt]) -> pir::ir::Module<'a>;
+    fn lower<'a, S: AsRef<str>>(
+        &'a self,
+        ctx: &PicanContext<S>,
+        ir: &[ast::Stmt],
+    ) -> pir::ir::Module<'a>;
 }
 impl FrontendToPirCtx for IrContext {
-    fn lower<'a>(&'a self, ctx: &PicanContext, ir: &[ast::Stmt]) -> pir::ir::Module<'a> {
+    fn lower<'a, S: AsRef<str>>(
+        &'a self,
+        ctx: &PicanContext<S>,
+        ir: &[ast::Stmt],
+    ) -> pir::ir::Module<'a> {
         let mut l = lowering::PirLower::new(self.arena(), ctx);
         for stmt in ir {
             let _ = l.lower_toplevel_stmt(*stmt.get());
@@ -37,14 +45,14 @@ mod lowering {
     use pican_pir::bindings as pib;
     use pican_pir::ir as pir;
 
-    pub struct PirLower<'a, 'c> {
+    pub struct PirLower<'a, 'c, S: AsRef<str>> {
         alloc: &'a Bump,
-        ctx: &'c PicanContext,
+        ctx: &'c PicanContext<S>,
         bindings: pib::Bindings<'a>,
         entry_points: BumpVec<'a, IrNode<pir::EntryPoint<'a>>>,
     }
-    impl<'a, 'c> PirLower<'a, 'c> {
-        pub fn new(alloc: &'a Bump, ctx: &'c PicanContext) -> Self {
+    impl<'a, 'c, S: AsRef<str>> PirLower<'a, 'c, S> {
+        pub fn new(alloc: &'a Bump, ctx: &'c PicanContext<S>) -> Self {
             Self {
                 alloc,
                 ctx,
@@ -103,26 +111,38 @@ mod lowering {
     }
     trait Lower {
         type Pir<'a>;
-        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted>;
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted>;
     }
     impl<'b> Lower for Ident<'b> {
         type Pir<'a> = Ident<'a>;
 
-        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             Ok(self.copy_to(ctx.alloc))
         }
     }
     impl<T: Lower> Lower for IrNode<T> {
         type Pir<'a> = IrNode<T::Pir<'a>>;
 
-        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             self.map(|i| i.lower(ctx)).transpose()
         }
     }
     impl Lower for Operand<'_> {
         type Pir<'a> = pir::Operand<'a>;
 
-        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             let r = match self {
                 Operand::Var(v) => pir::Operand::Var(ctx.lower(v)?),
                 Operand::Register(r) => pir::Operand::Register(r),
@@ -133,7 +153,10 @@ mod lowering {
     impl Lower for Operands<'_> {
         type Pir<'a> = ArrayVec<IrNode<pir::Operand<'a>>, 4>;
 
-        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             if self.0.len() > 4 {
                 return ctx.ctx.diag.fatal(
                     DiagnosticBuilder::error()
@@ -152,7 +175,10 @@ mod lowering {
     impl Lower for Op<'_> {
         type Pir<'a> = pir::Op<'a>;
 
-        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             let opcode = self.opcode;
             let operands = ctx.lower(self.operands)?;
             Ok(pir::Op { opcode, operands })
@@ -161,7 +187,10 @@ mod lowering {
     impl Lower for FunctionDecl<'_> {
         type Pir<'a> = pir::EntryPoint<'a>;
 
-        fn lower<'a, 'c>(self, ctx: &PirLower<'a, 'c>) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             let name = ctx.lower(self.name)?;
             let ops = self
                 .block

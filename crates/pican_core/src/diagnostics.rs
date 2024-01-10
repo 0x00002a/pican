@@ -1,9 +1,11 @@
 use std::{borrow::Cow, cell::RefCell};
 
 use codespan_reporting::diagnostic::{LabelStyle, Severity};
+use serde::Serialize;
 
 use crate::ir::{IrNode, Span};
 
+#[derive(Debug, Serialize)]
 pub struct Diagnostic {
     level: DiagnosticLevel,
     pub messages: Box<[DiagnosticMessage]>,
@@ -11,6 +13,7 @@ pub struct Diagnostic {
 
 pub struct FatalErrorEmitted(());
 
+#[derive(Debug, Serialize)]
 pub struct DiagnosticMessage {
     style: LabelStyle,
     txt: Cow<'static, str>,
@@ -18,7 +21,7 @@ pub struct DiagnosticMessage {
     severity: Severity,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 enum DiagnosticLevel {
     Fatal,
     Error,
@@ -85,7 +88,7 @@ impl DiagnosticBuilder {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Diagnostics {
     diags: RefCell<Vec<Diagnostic>>,
 }
