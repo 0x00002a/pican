@@ -32,11 +32,11 @@ fn main() {
     );
 
     let pir_ctx = IrContext::new();
-    let Some(pir) = parse_and_lower(input_id, &ctx, &pir_ctx) else {
-        print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);
-        return;
-    };
+    let pir = parse_and_lower(input_id, &ctx, &pir_ctx);
+    print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);
 
-    let json = serde_json::to_string_pretty(&pir).unwrap();
-    println!("{json}");
+    if let Some(pir) = pir {
+        let json = serde_json::to_string_pretty(&pir).unwrap();
+        println!("{json}");
+    }
 }
