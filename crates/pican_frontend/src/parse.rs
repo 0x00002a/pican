@@ -205,7 +205,7 @@ where
 }
 
 pub fn stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
-    nfo(op).map(Into::into).parse(i)
+    branch::alt((nfo(op).map(Into::into), nfo(entry_point).map(Into::into))).parse(i)
 }
 
 fn array_index<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Nfo<u8>> {
@@ -275,8 +275,8 @@ fn entry_point<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, FunctionDecl<'a>> 
         Ok((i, Block { statements }))
     }
 
-    let (i, name) = nfo(tag(".").ignore_then(ident.req("missing identifier after '.'")))(i)?;
-    let (i, block) = nfo(block.req("missing block end"))(i)?;
+    let (i, name) = nfo(tag(".proc ").ignore_then(ident.req("missing identifier after '.'")))(i)?;
+    let (i, block) = nfo(block).req("missing block end").parse(i)?;
     Ok((i, FunctionDecl { name, block }))
 }
 
@@ -482,5 +482,11 @@ mod tests {
                 ),
             )
             .unwrap();
+    }
+    #[test]
+    fn parse_entry_point() {
+        let ctx = TestCtx::new();
+        let ep = ctx.run_parser(".proc m .end", super::entry_point).unwrap();
+        assert_eq!(ep.name.get(), "m")
     }
 }

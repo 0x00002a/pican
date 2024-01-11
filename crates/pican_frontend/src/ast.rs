@@ -13,7 +13,7 @@ macro_rules! sum_node {
         $($variant:ident ($inner:ident)),*
     }) => {
         #[typesum::sumtype]
-        #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+        #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
         $vi enum $name <'a> {
             $($variant ( IrNode<$inner <'a>> )),*
         }
@@ -30,36 +30,36 @@ pub enum Statement {
 }
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct ConstantDecl<'a> {
     pub name: IrNode<Ident<'a>>,
     pub values: IrNode<&'a [IrNode<Float>]>,
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct UniformDecl<'a> {
     pub name: IrNode<Ident<'a>>,
     /// Dimension of the uniform, None for vectors
     pub dimensions: Option<IrNode<u8>>,
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct RegisterBind<'a> {
     pub reg: IrNode<Register>,
     pub name: IrNode<Ident<'a>>,
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 #[typesum::sumtype]
 pub enum Operand<'a> {
     Var(IrNode<Ident<'a>>),
     Register(IrNode<Register>),
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct Operands<'a>(pub &'a [IrNode<Operand<'a>>]);
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct Op<'a> {
     pub opcode: IrNode<OpCode>,
     pub operands: IrNode<Operands<'a>>,
@@ -67,7 +67,7 @@ pub struct Op<'a> {
 
 pub type Stmt<'a> = IrNode<Statement<'a>>;
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct Comment<'a> {
     pub content: IrNode<&'a str>,
 }
@@ -75,13 +75,13 @@ pub struct Comment<'a> {
 /// A section
 ///
 /// e.g. .main
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct FunctionDecl<'a> {
     pub name: IrNode<Ident<'a>>,
     pub block: IrNode<Block<'a>>,
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct Block<'a> {
     pub statements: IrNode<&'a [Stmt<'a>]>,
 }
