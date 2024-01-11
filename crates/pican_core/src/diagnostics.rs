@@ -1,6 +1,7 @@
-use std::{borrow::Cow, cell::RefCell};
+use std::{borrow::Cow, cell::RefCell, io::Write};
 
-use codespan_reporting::diagnostic::{LabelStyle, Severity};
+use codespan::FileId;
+use codespan_reporting::diagnostic::{Label, LabelStyle, Severity};
 use serde::Serialize;
 
 use crate::ir::{IrNode, Span};
@@ -105,5 +106,47 @@ impl Diagnostics {
 
     pub fn add(&self, diag: Diagnostic) {
         self.diags.borrow_mut().push(diag)
+    }
+    pub fn as_codespan(&self) -> Vec<codespan_reporting::diagnostic::Diagnostic<FileId>> {
+        let mut reporting_diags = Vec::new();
+        for d in self.diags.borrow().iter() {
+            let mut diag = codespan_reporting::diagnostic::Diagnostic::new(d.level.into());
+            for DiagnosticMessage {
+                style,
+                txt,
+                span,
+                severity,
+            } in d.messages.iter()
+            {
+                if let Some(span) = span {
+                    let lbl = Label::new(
+                        *style,
+                        span.file(),
+                        span.src_span().start().0 as usize..span.src_span().end().0 as usize,
+                    );
+                    diag.labels.push(lbl);
+                }
+                match style {
+                    LabelStyle::Primary => diag.message = txt.clone().into_owned(),
+                    LabelStyle::Secondary => {
+                        let mut diag = codespan_reporting::diagnostic::Diagnostic::new(*severity)
+                            .with_message(txt.clone());
+
+                        if let Some(span) = span {
+                            let lbl = Label::new(
+                                LabelStyle::Primary,
+                                span.file(),
+                                span.src_span().start().0 as usize
+                                    ..span.src_span().end().0 as usize,
+                            );
+                            diag.labels.push(lbl);
+                        }
+                        reporting_diags.push(diag);
+                    }
+                }
+            }
+            reporting_diags.push(diag);
+        }
+        reporting_diags
     }
 }

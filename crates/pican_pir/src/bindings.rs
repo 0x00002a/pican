@@ -4,14 +4,15 @@ use pican_core::{
     ir::{Ident, IrNode, Span},
     register::Register,
 };
+use serde::Serialize;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
 struct Binding<'a> {
     name: IrNode<Ident<'a>>,
     value: IrNode<BindingValue<'a>>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, PartialEq, Eq, Clone)]
 pub struct Bindings<'a> {
     tbl: HashMap<Ident<'a>, Binding<'a>>,
 }
@@ -46,14 +47,14 @@ impl<'a> Bindings<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
 #[typesum::sumtype(only = from)]
 pub enum BindingValue<'a> {
     SwizzleAlias(SwizzleAlias<'a>),
     Register(Register),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct SwizzleAlias<'a> {
     pub target: IrNode<Ident<'a>>,
 }

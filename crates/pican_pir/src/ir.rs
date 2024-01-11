@@ -2,6 +2,7 @@ use arrayvec::ArrayVec;
 use serde::Serialize;
 
 use pican_core::{
+    copy_arrayvec::CopyArrayVec,
     ir::{Ident, IrNode},
     ops::{OpCode, OperandKind},
     register::Register,
@@ -10,22 +11,25 @@ use pican_core::{
 use super::bindings::Bindings;
 
 /// Single shader module
+#[derive(Debug, Serialize, PartialEq, Eq, Clone)]
 pub struct Module<'a> {
     pub entry_points: &'a [IrNode<EntryPoint<'a>>],
     pub bindings: Bindings<'a>,
 }
 
+#[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct EntryPoint<'a> {
     pub name: IrNode<Ident<'a>>,
     pub ops: IrNode<&'a [IrNode<Op<'a>>]>,
 }
 
+#[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Op<'a> {
     pub opcode: IrNode<OpCode>,
-    pub operands: IrNode<ArrayVec<IrNode<Operand<'a>>, 4>>,
+    pub operands: IrNode<CopyArrayVec<IrNode<Operand<'a>>, 4>>,
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 #[typesum::sumtype]
 pub enum Operand<'a> {
     Var(IrNode<Ident<'a>>),

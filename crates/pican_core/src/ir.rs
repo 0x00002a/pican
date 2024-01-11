@@ -72,6 +72,14 @@ impl Span {
             span: self.span.merge(other.span),
         }
     }
+
+    pub fn src_span(&self) -> codespan::Span {
+        self.span
+    }
+
+    pub fn file(&self) -> FileId {
+        self.file
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, Serialize, Deserialize)]

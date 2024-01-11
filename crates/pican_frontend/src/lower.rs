@@ -35,6 +35,7 @@ mod lowering {
     use pican_core::{
         alloc::{Bump, BumpVec},
         context::PicanContext,
+        copy_arrayvec::CopyArrayVec,
         diagnostics::{DiagnosticBuilder, FatalErrorEmitted},
         ir::{Ident, IrNode},
         register::Register,
@@ -151,7 +152,7 @@ mod lowering {
         }
     }
     impl Lower for Operands<'_> {
-        type Pir<'a> = ArrayVec<IrNode<pir::Operand<'a>>, 4>;
+        type Pir<'a> = CopyArrayVec<IrNode<pir::Operand<'a>>, 4>;
 
         fn lower<'a, 'c, S: AsRef<str>>(
             self,
@@ -165,7 +166,7 @@ mod lowering {
                         .build(),
                 );
             }
-            let mut ops = ArrayVec::new();
+            let mut ops = CopyArrayVec::new();
             for op in self.0 {
                 ops.push(ctx.lower(op.copied())?);
             }

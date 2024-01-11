@@ -2,6 +2,7 @@ use diagnostics::FatalErrorEmitted;
 
 pub mod alloc;
 pub mod context;
+pub mod copy_arrayvec;
 pub mod diagnostics;
 pub mod ir;
 pub mod ops;
