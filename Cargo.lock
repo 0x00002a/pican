@@ -273,16 +273,8 @@ version = "0.1.0"
 dependencies = [
  "arrayvec",
  "pican_core",
- "pican_pir_macros",
  "serde",
  "typesum",
-]
-
-[[package]]
-name = "pican_pir_macros"
-version = "0.1.0"
-dependencies = [
- "syn",
 ]
 
 [[package]]
