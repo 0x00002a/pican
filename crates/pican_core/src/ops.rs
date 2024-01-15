@@ -67,6 +67,3 @@ pub enum OperandWidth {
     Wide,
     Narrow,
 }
-pub enum OperandKind {
-    Input(),
-}

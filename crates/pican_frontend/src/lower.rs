@@ -37,16 +37,16 @@ mod lowering {
         context::PicanContext,
         copy_arrayvec::CopyArrayVec,
         diagnostics::{DiagnosticBuilder, FatalErrorEmitted},
-        ir::{Float, Ident, IrNode},
+        ir::{Float, Ident, IrNode, SwizzleDim, SwizzleDims},
         register::Register,
         PResult,
     };
 
     use crate::ast::{
-        Constant, ConstantDecl, FunctionDecl, Op, Operand, Operands, Statement, Stmt, UniformDecl,
-        UniformTy,
+        Constant, ConstantDecl, FunctionDecl, Op, Operand, Operands, Statement, Stmt, SwizzleExpr,
+        UniformDecl, UniformTy,
     };
-    use pican_pir::bindings as pib;
+    use pican_pir::bindings::{self as pib, SwizzleValue};
     use pican_pir::ir as pir;
 
     pub struct PirLower<'a, 'c, S: AsRef<str>> {
@@ -116,7 +116,7 @@ mod lowering {
                     // it in the arena if its not used
                     self.check_non_aliased(b.get().name)?;
                     let name = b.get().name.lower(self)?;
-                    self.bindings.define(name, b.get().reg);
+                    self.bindings.define(name, b.get().reg.lower(self)?);
                     Ok(())
                 }
                 Statement::Uniform(u) => {
@@ -240,19 +240,20 @@ mod lowering {
         }
     }
     impl Lower for Operand<'_> {
-        type Pir<'a> = pir::Operand<'a>;
+        type Pir<'a> = pir::OperandKind<'a>;
 
         fn lower<'a, 'c, S: AsRef<str>>(
             self,
             ctx: &PirLower<'a, 'c, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             let r = match self {
-                Operand::Var(v) => pir::Operand::Var(ctx.lower(v)?),
-                Operand::Register(r) => pir::Operand::Register(r),
+                Operand::Var(v) => pir::OperandKind::Var(ctx.lower(v)?),
+                Operand::Register(r) => pir::OperandKind::Register(r),
             };
             Ok(r)
         }
     }
+
     impl Lower for Operands<'_> {
         type Pir<'a> = CopyArrayVec<IrNode<pir::Operand<'a>>, 4>;
 
@@ -285,6 +286,49 @@ mod lowering {
             let opcode = self.opcode;
             let operands = ctx.lower(self.operands)?;
             Ok(pir::Op { opcode, operands })
+        }
+    }
+    impl<'b> Lower for SwizzleDims<'b> {
+        type Pir<'a> = SwizzleDims<'a>;
+
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            Ok(SwizzleDims(self.0.map(|s| -> &'a [SwizzleDim] {
+                ctx.alloc.alloc_slice_copy(s)
+            })))
+        }
+    }
+    impl<'b> Lower for SwizzleExpr<'b, Operand<'b>> {
+        type Pir<'a> = pir::Operand<'a>;
+
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            Ok(pir::Operand {
+                kind: self.target.lower(ctx)?,
+                swizzle: self.swizzle.map(|s| s.lower(ctx)).transpose()?,
+            })
+        }
+    }
+
+    impl<'b> Lower for SwizzleExpr<'b, Register> {
+        type Pir<'a> = pib::BindingValue<'a>;
+
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            if let Some(swiz) = self.swizzle {
+                Ok(pib::BindingValue::SwizzleRegister(SwizzleValue {
+                    swizzle: swiz.lower(ctx)?,
+                    target: self.target,
+                }))
+            } else {
+                Ok(pib::BindingValue::Register(self.target.into_inner()))
+            }
         }
     }
     impl Lower for FunctionDecl<'_> {

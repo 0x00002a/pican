@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use pican_core::{
-    ir::{Ident, IrNode, Span},
+    ir::{Ident, IrNode, Span, SwizzleDims},
     register::Register,
 };
 use serde::Serialize;
@@ -52,15 +52,16 @@ impl<'a> Bindings<'a> {
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
 #[typesum::sumtype(only = from)]
 pub enum BindingValue<'a> {
-    SwizzleAlias(SwizzleAlias<'a>),
+    SwizzleRegister(SwizzleValue<'a, Register>),
     Register(Register),
     Uniform(Uniform),
     Constant(ConstantUniform<'a>),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
-pub struct SwizzleAlias<'a> {
-    pub target: IrNode<Ident<'a>>,
+pub struct SwizzleValue<'a, T> {
+    pub target: IrNode<T>,
+    pub swizzle: IrNode<SwizzleDims<'a>>,
 }
 
 pub struct Alias<'a> {

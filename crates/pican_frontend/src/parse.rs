@@ -1,7 +1,7 @@
 use super::ast::Stmt;
 use crate::ast::{
     self, Block, Constant, ConstantDecl, ConstantDiscriminants, FunctionDecl, Ident, Op, OpCode,
-    Operand, Operands, RegisterBind, Statement, Uniform, UniformDecl, UniformTy,
+    Operand, Operands, RegisterBind, Statement, SwizzleExpr, Uniform, UniformDecl, UniformTy,
 };
 use crate::parse_ext::ParserExt;
 use nom::bytes::complete::take_until;
@@ -24,7 +24,7 @@ use nom::{
 use nom::{AsChar, Compare, InputLength, InputTake, InputTakeAtPosition};
 use nom_locate::LocatedSpan;
 use pican_core::alloc::Bump;
-use pican_core::ir::Float;
+use pican_core::ir::{Float, SwizzleDim, SwizzleDims};
 use pican_core::ir::{IrNode, Span};
 use pican_core::register::{Register, RegisterKind};
 use pican_core::span::{FileId, Location};
@@ -36,7 +36,7 @@ struct InputContext<'a> {
     file: FileId,
 }
 impl<'a> InputContext<'a> {
-    pub fn alloc<A: Copy>(&self, val: A) -> &'a mut A {
+    pub fn alloc<A: Copy>(&self, val: A) -> &'a A {
         self.area.alloc(val)
     }
 
@@ -290,7 +290,7 @@ pub fn register_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, RegisterBind
     let (i, _) = space(i)?;
     let (i, name) = nfo(ident.req("expected identifier for alias"))(i)?;
     let (i, _) = space(i)?;
-    let (i, reg) = nfo(register.req("expected register for alias"))(i)?;
+    let (i, reg) = nfo(swizzle_expr(register).req("expected register for alias"))(i)?;
     Ok((i, RegisterBind { name, reg }))
 }
 
@@ -456,6 +456,39 @@ fn opcode<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, OpCode> {
     }
     ncm::fail(i)
 }
+fn swizzle_expr<'a, 'p, T, E, P>(
+    mut p: P,
+) -> impl FnMut(Input<'a, &'p str>) -> Pres<'a, 'p, SwizzleExpr<'a, T>, Input<'a, &'p str>, E>
+where
+    P: Parser<Input<'a, &'p str>, T, E>,
+    E: nom::error::ParseError<nom_locate::LocatedSpan<&'p str, InputContext<'a>>>
+        + nom::error::ContextError<nom_locate::LocatedSpan<&'p str, InputContext<'a>>>,
+    nom::Err<E>: std::convert::From<
+        nom::Err<nom::error::VerboseError<nom_locate::LocatedSpan<&'p str, InputContext<'a>>>>,
+    >,
+{
+    let parse_swiz = |i| {
+        let (i, expr) = nfo(many0_in(swizzle_dim)).parse(i)?;
+        Ok((i, SwizzleDims(expr.map(|e| e.into_bump_slice()))))
+    };
+    move |i| {
+        let (i, target) = nfo(|i| p.parse(i)).parse(i)?;
+        let (i, swizzle) = ncm::opt(nfo(
+            tag(".").ignore_then(parse_swiz.req("expected swizzle expression"))
+        ))(i)?;
+        Ok((i, SwizzleExpr { target, swizzle }))
+    }
+}
+
+fn swizzle_dim<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, SwizzleDim> {
+    penum(&[
+        ("x", SwizzleDim::X),
+        ("y", SwizzleDim::Y),
+        ("z", SwizzleDim::Z),
+        ("w", SwizzleDim::W),
+    ])
+    .parse(i)
+}
 
 fn operands<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operands<'a>> {
     fn operand<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operand<'a>> {
@@ -465,7 +498,7 @@ fn operands<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operands<'a>> {
         ))
         .parse(i)
     }
-    let (i, ops) = nom::multi::separated_list1(tkn(","), nfo(operand))(i)?;
+    let (i, ops) = nom::multi::separated_list1(tkn(","), nfo(swizzle_expr(operand)))(i)?;
     let ops = i.extra.area.alloc_slice_copy(&ops);
     Ok((i, Operands(ops)))
 }
@@ -587,7 +620,10 @@ mod tests {
         assert_eq!(mov.opcode.get(), &OpCode::Mov);
         let operands = mov.operands.get().0;
         assert_eq!(operands.len(), 2);
-        assert_eq!(operands[0].get().try_as_var().unwrap().get(), "dst");
+        assert_eq!(
+            operands[0].get().target.get().try_as_var().unwrap().get(),
+            "dst"
+        );
     }
     #[test]
     fn parse_ident_with_num() {
@@ -601,8 +637,14 @@ mod tests {
         let ctx = TestCtx::new();
         let res = ctx.run_parser("smth, smth2", super::operands).unwrap();
         assert_eq!(res.0.len(), 2);
-        assert_eq!(res.0[0].get().try_as_var().unwrap().get(), "smth");
-        assert_eq!(res.0[1].get().try_as_var().unwrap().get(), "smth2");
+        assert_eq!(
+            res.0[0].get().target.get().try_as_var().unwrap().get(),
+            "smth"
+        );
+        assert_eq!(
+            res.0[1].get().target.get().try_as_var().unwrap().get(),
+            "smth2"
+        );
     }
     #[test]
     fn opcode_parser_doesnt_eat_space_before() {
@@ -616,12 +658,12 @@ mod tests {
         let ctx = TestCtx::new();
         let res = ctx.run_parser("v0, r1", super::operands).unwrap();
         assert_eq!(
-            res.0[0].get().try_as_register().unwrap().get(),
+            res.0[0].get().target.get().try_as_register().unwrap().get(),
             &Register::from_str("v0").unwrap(),
         );
 
         assert_eq!(
-            res.0[1].get().try_as_register().unwrap().get(),
+            res.0[1].get().target.get().try_as_register().unwrap().get(),
             &Register::from_str("r1").unwrap(),
         );
     }
@@ -689,7 +731,7 @@ mod tests {
         let ctx = TestCtx::new();
         let r = ctx.run_parser(".alias m r0", super::register_bind).unwrap();
         assert_eq!(r.name.get(), "m");
-        assert_eq!(r.reg.get(), &Register::from_str("r0").unwrap());
+        assert_eq!(r.reg.get().target.get(), &Register::from_str("r0").unwrap());
     }
 
     #[test]

@@ -179,3 +179,14 @@ impl<T> IrNode<IrNode<T>> {
         }
     }
 }
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+pub enum SwizzleDim {
+    X,
+    Y,
+    Z,
+    W,
+}
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+pub struct SwizzleDims<'a>(pub IrNode<&'a [SwizzleDim]>);

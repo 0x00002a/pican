@@ -1,9 +1,10 @@
 use std::rc::Rc;
 
+use pican_core::copy_arrayvec::CopyArrayVec;
 use pican_core::register::Register;
 use serde::{Deserialize, Serialize};
 
-use pican_core::ir::{Float, IrNode};
+use pican_core::ir::{Float, IrNode, SwizzleDims};
 
 pub use pican_core::ir::Ident;
 pub use pican_core::ops::OpCode;
@@ -69,9 +70,15 @@ pub struct Uniform<'a> {
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+pub struct SwizzleExpr<'a, T> {
+    pub target: IrNode<T>,
+    pub swizzle: Option<IrNode<SwizzleDims<'a>>>,
+}
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct RegisterBind<'a> {
     pub name: IrNode<Ident<'a>>,
-    pub reg: IrNode<Register>,
+    pub reg: IrNode<SwizzleExpr<'a, Register>>,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
@@ -82,7 +89,7 @@ pub enum Operand<'a> {
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
-pub struct Operands<'a>(pub &'a [IrNode<Operand<'a>>]);
+pub struct Operands<'a>(pub &'a [IrNode<SwizzleExpr<'a, Operand<'a>>>]);
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct Op<'a> {

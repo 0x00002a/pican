@@ -3,12 +3,12 @@ use serde::Serialize;
 
 use pican_core::{
     copy_arrayvec::CopyArrayVec,
-    ir::{Float, Ident, IrNode},
-    ops::{OpCode, OperandKind},
+    ir::{Float, Ident, IrNode, SwizzleDims},
+    ops::OpCode,
     register::Register,
 };
 
-use crate::ty::UniformTy;
+use crate::{bindings::SwizzleValue, ty::UniformTy};
 
 use super::bindings::Bindings;
 
@@ -30,10 +30,15 @@ pub struct Op<'a> {
     pub opcode: IrNode<OpCode>,
     pub operands: IrNode<CopyArrayVec<IrNode<Operand<'a>>, 4>>,
 }
+#[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct Operand<'a> {
+    pub kind: IrNode<OperandKind<'a>>,
+    pub swizzle: Option<IrNode<SwizzleDims<'a>>>,
+}
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 #[typesum::sumtype]
-pub enum Operand<'a> {
+pub enum OperandKind<'a> {
     Var(IrNode<Ident<'a>>),
     Register(IrNode<Register>),
     Constant(IrNode<ConstantUniform<'a>>),
