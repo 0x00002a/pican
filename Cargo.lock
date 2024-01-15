@@ -427,6 +427,7 @@ dependencies = [
 name = "test_cases"
 version = "0.1.0"
 dependencies = [
+ "codespan-reporting",
  "glob",
  "pican_core",
  "pican_frontend",

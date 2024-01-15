@@ -15,7 +15,10 @@ fn {name}() {{
 
     let pir_ctx = IrContext::new();
     let pir = pican_frontend::parse_and_lower(input_id, &ctx, &pir_ctx);
-    assert!({assertion});
+    if pir.is_none() {{
+        super::print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);
+    }}
+    assert!(pir.is_some());
 }}
 "#,
         path = prog_file.display(),
@@ -26,7 +29,6 @@ fn {name}() {{
             .replace([' '], "_space_")
             .replace('-', "_dash_")
             .replace('.', "_dot_"),
-        assertion = "pir.is_some()",
     )
 }
 
