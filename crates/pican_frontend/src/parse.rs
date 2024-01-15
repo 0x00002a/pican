@@ -1,8 +1,8 @@
 use super::ast::Stmt;
 use crate::ast::{
     self, Block, Constant, ConstantDecl, ConstantDiscriminants, FunctionDecl, Ident, InputBind, Op,
-    OpCode, Operand, Operands, OutputBind, RegisterBind, Statement, SwizzleExpr, Uniform,
-    UniformDecl, UniformTy,
+    OpCode, Operand, OperandKind, Operands, OutputBind, RegisterBind, Statement, SwizzleExpr,
+    Uniform, UniformDecl, UniformTy,
 };
 use crate::parse_ext::ParserExt;
 use nom::bytes::complete::take_until;
@@ -253,9 +253,9 @@ pub fn stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
     .parse(i)
 }
 
-fn array_index<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Nfo<u8>> {
+fn array_index<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Nfo<u32>> {
     tkn("[")
-        .ignore_then(nfo(nmc::u8).req("expected index"))
+        .ignore_then(nfo(nmc::u32).req("expected index"))
         .then_ignore(tkn("]").req("missing closing ]"))
         .parse(i)
 }
@@ -522,6 +522,12 @@ fn opcode<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, OpCode> {
     }
     ncm::fail.ctx("unknown opcode").parse(i)
 }
+
+fn swizzle_dims<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, SwizzleDims<'a>> {
+    let (i, _) = tag(".")(i)?;
+    let (i, expr) = nfo(many0_in(swizzle_dim)).parse(i)?;
+    Ok((i, SwizzleDims(expr.map(|e| e.into_bump_slice()))))
+}
 fn swizzle_expr<'a, 'p, T, E, P>(
     mut p: P,
 ) -> impl FnMut(Input<'a, &'p str>) -> Pres<'a, 'p, SwizzleExpr<'a, T>, Input<'a, &'p str>, E>
@@ -533,15 +539,9 @@ where
         nom::Err<nom::error::VerboseError<nom_locate::LocatedSpan<&'p str, InputContext<'a>>>>,
     >,
 {
-    let parse_swiz = |i| {
-        let (i, expr) = nfo(many0_in(swizzle_dim)).parse(i)?;
-        Ok((i, SwizzleDims(expr.map(|e| e.into_bump_slice()))))
-    };
     move |i| {
         let (i, target) = nfo(|i| p.parse(i)).parse(i)?;
-        let (i, swizzle) = ncm::opt(nfo(
-            tag(".").ignore_then(parse_swiz.req("expected swizzle expression"))
-        ))(i)?;
+        let (i, swizzle) = ncm::opt(nfo(swizzle_dims))(i)?;
         Ok((i, SwizzleExpr { target, swizzle }))
     }
 }
@@ -556,16 +556,30 @@ fn swizzle_dim<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, SwizzleDim> {
     .parse(i)
 }
 
+fn operand_kind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OperandKind<'a>> {
+    branch::alt((
+        nfo(register.ctx("register operand")).map(OperandKind::Register),
+        nfo(ident.ctx("identifier operand")).map(OperandKind::Var),
+    ))
+    .ctx("operand")
+    .parse(i)
+}
+
+fn operand<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operand<'a>> {
+    let (i, kind) = nfo(operand_kind)(i)?;
+    let (i, relative_address) = ncm::opt(array_index.ctx("operand relative address"))(i)?;
+    let (i, swizzle) = ncm::opt(nfo(swizzle_dims.ctx("operand swizzle")))(i)?;
+    Ok((
+        i,
+        Operand {
+            kind,
+            relative_address,
+            swizzle,
+        },
+    ))
+}
 fn operands<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operands<'a>> {
-    fn operand<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operand<'a>> {
-        branch::alt((
-            nfo(register.ctx("register operand")).map(Operand::Register),
-            nfo(ident.ctx("identifier operand")).map(Operand::Var),
-        ))
-        .ctx("operand")
-        .parse(i)
-    }
-    let (i, ops) = nom::multi::separated_list0(tkn(","), nfo(swizzle_expr(operand)))(i)?;
+    let (i, ops) = nom::multi::separated_list0(tkn(","), nfo(operand))(i)?;
     let ops = i.extra.area.alloc_slice_copy(&ops);
     Ok((i, Operands(ops)))
 }
@@ -697,7 +711,7 @@ mod tests {
         let operands = mov.operands.get().0;
         assert_eq!(operands.len(), 2);
         assert_eq!(
-            operands[0].get().target.get().try_as_var().unwrap().get(),
+            operands[0].get().kind.get().try_as_var().unwrap().get(),
             "mlk"
         );
     }
@@ -721,11 +735,11 @@ mod tests {
         let res = ctx.run_parser("smth, smth2", super::operands).unwrap();
         assert_eq!(res.0.len(), 2);
         assert_eq!(
-            res.0[0].get().target.get().try_as_var().unwrap().get(),
+            res.0[0].get().kind.get().try_as_var().unwrap().get(),
             "smth"
         );
         assert_eq!(
-            res.0[1].get().target.get().try_as_var().unwrap().get(),
+            res.0[1].get().kind.get().try_as_var().unwrap().get(),
             "smth2"
         );
     }
@@ -741,12 +755,12 @@ mod tests {
         let ctx = TestCtx::new();
         let res = ctx.run_parser("v0, r1", super::operands).unwrap();
         assert_eq!(
-            res.0[0].get().target.get().try_as_register().unwrap().get(),
+            res.0[0].get().kind.get().try_as_register().unwrap().get(),
             &Register::from_str("v0").unwrap(),
         );
 
         assert_eq!(
-            res.0[1].get().target.get().try_as_register().unwrap().get(),
+            res.0[1].get().kind.get().try_as_register().unwrap().get(),
             &Register::from_str("r1").unwrap(),
         );
     }

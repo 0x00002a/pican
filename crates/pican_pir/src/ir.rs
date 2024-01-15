@@ -48,6 +48,7 @@ pub struct Op<'a> {
 #[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Operand<'a> {
     pub kind: IrNode<OperandKind<'a>>,
+    pub relative_addr: Option<IrNode<u32>>,
     pub swizzle: Option<IrNode<SwizzleDims<'a>>>,
 }
 

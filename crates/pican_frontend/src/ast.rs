@@ -103,13 +103,19 @@ pub enum RegisterBindTarget<'a> {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 #[typesum::sumtype]
-pub enum Operand<'a> {
+pub enum OperandKind<'a> {
     Var(IrNode<Ident<'a>>),
     Register(IrNode<Register>),
 }
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+pub struct Operand<'a> {
+    pub kind: IrNode<OperandKind<'a>>,
+    pub relative_address: Option<IrNode<u32>>,
+    pub swizzle: Option<IrNode<SwizzleDims<'a>>>,
+}
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
-pub struct Operands<'a>(pub &'a [IrNode<SwizzleExpr<'a, Operand<'a>>>]);
+pub struct Operands<'a>(pub &'a [IrNode<Operand<'a>>]);
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct Op<'a> {

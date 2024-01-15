@@ -44,7 +44,7 @@ mod lowering {
     };
 
     use crate::ast::{
-        Constant, ConstantDecl, FunctionDecl, Op, Operand, Operands, OutputBind,
+        Constant, ConstantDecl, FunctionDecl, Op, Operand, OperandKind, Operands, OutputBind,
         RegisterBindTarget, Statement, Stmt, SwizzleExpr, UniformDecl, UniformTy,
     };
     use pican_pir::bindings::{self as pib, SwizzleValue};
@@ -287,7 +287,7 @@ mod lowering {
             self.map(|i| i.lower(ctx)).transpose()
         }
     }
-    impl Lower for Operand<'_> {
+    impl Lower for OperandKind<'_> {
         type Pir<'a> = pir::OperandKind<'a>;
 
         fn lower<'a, 'c, S: AsRef<str>>(
@@ -295,8 +295,8 @@ mod lowering {
             ctx: &PirLower<'a, 'c, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             let r = match self {
-                Operand::Var(v) => pir::OperandKind::Var(ctx.lower(v)?),
-                Operand::Register(r) => pir::OperandKind::Register(r),
+                OperandKind::Var(v) => pir::OperandKind::Var(ctx.lower(v)?),
+                OperandKind::Register(r) => pir::OperandKind::Register(r),
             };
             Ok(r)
         }
@@ -348,7 +348,7 @@ mod lowering {
             })))
         }
     }
-    impl<'b> Lower for SwizzleExpr<'b, Operand<'b>> {
+    impl<'b> Lower for Operand<'b> {
         type Pir<'a> = pir::Operand<'a>;
 
         fn lower<'a, 'c, S: AsRef<str>>(
@@ -356,7 +356,8 @@ mod lowering {
             ctx: &PirLower<'a, 'c, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             Ok(pir::Operand {
-                kind: self.target.lower(ctx)?,
+                kind: self.kind.lower(ctx)?,
+                relative_addr: self.relative_address,
                 swizzle: self.swizzle.map(|s| s.lower(ctx)).transpose()?,
             })
         }
