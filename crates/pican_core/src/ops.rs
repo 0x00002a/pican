@@ -61,6 +61,9 @@ impl OpCode {
     pub fn variants_lookup() -> impl Iterator<Item = (&'static str, Self)> {
         Self::VARIANTS.iter().copied().zip(Self::iter())
     }
+    pub fn is_no_argument(self) -> bool {
+        matches!(self, Self::End | Self::Break | Self::Emit | Self::Nop)
+    }
 }
 
 pub enum OperandWidth {

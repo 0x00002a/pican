@@ -25,7 +25,7 @@ use nom::{
 use nom::{AsChar, Compare, InputLength, InputTake, InputTakeAtPosition};
 use nom_locate::LocatedSpan;
 use pican_core::alloc::Bump;
-use pican_core::ir::{Float, SwizzleDim, SwizzleDims};
+use pican_core::ir::{Float, HasSpan, SwizzleDim, SwizzleDims};
 use pican_core::ir::{IrNode, Span};
 use pican_core::properties::OutputProperty;
 use pican_core::register::{Register, RegisterKind};
@@ -444,8 +444,12 @@ fn uniform_decl<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, UniformDecl<'a>> 
 }
 fn entry_point<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, FunctionDecl<'a>> {
     pub fn block<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Block<'a>> {
-        let (i, _) = space(i)?; // consume whitespace so its part of our span and not the first statement's
-        let (i, info) = nfo(many_till(nfo(stmt), tkn(".end").ctx("block end")))(i)?;
+        let (i, _) = nmc::multispace0(i)?; // consume whitespace so its part of our span and not the first statement's
+        let (i, info) = nfo(many_till(
+            nfo(stmt.ctx("program statement").then_ignore(nmc::multispace0)),
+            tkn(".end").ctx("block end"),
+        )
+        .ctx("program statements"))(i)?;
         let statements = info.map(|(val, _)| i.extra.alloc_slice(&val)).map(|v| &*v);
         Ok((i, Block { statements }))
     }
@@ -555,18 +559,19 @@ fn swizzle_dim<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, SwizzleDim> {
 fn operands<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operands<'a>> {
     fn operand<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operand<'a>> {
         branch::alt((
-            nfo(register).map(Operand::Register),
-            nfo(ident).map(Operand::Var),
+            nfo(register.ctx("register operand")).map(Operand::Register),
+            nfo(ident.ctx("identifier operand")).map(Operand::Var),
         ))
+        .ctx("operand")
         .parse(i)
     }
-    let (i, ops) = nom::multi::separated_list1(tkn(","), nfo(swizzle_expr(operand)))(i)?;
+    let (i, ops) = nom::multi::separated_list0(tkn(","), nfo(swizzle_expr(operand)))(i)?;
     let ops = i.extra.area.alloc_slice_copy(&ops);
     Ok((i, Operands(ops)))
 }
 fn op<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Op<'a>> {
     let (i, code) = nfo(opcode.ctx("opcode"))(i)?;
-    let (i, _) = space1(i)?;
+    let (i, _) = nmc::space0(i)?;
     let (i, operands) = nfo(operands.req("missing operands to operation"))(i)?;
     Ok((
         i,
@@ -856,5 +861,12 @@ mod tests {
         let ctx = TestCtx::new();
         let r = ctx.run_parser("pos", super::output_property).unwrap();
         assert_eq!(r, OutputProperty::Position);
+    }
+
+    #[test]
+    fn parse_end() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser("end", super::op).unwrap();
+        assert_eq!(r.opcode.get(), &OpCode::End);
     }
 }

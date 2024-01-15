@@ -1,0 +1,2 @@
+.constf mmm(1.0, 0.0, 0.0, 0.0)
+.alias myName mmm
