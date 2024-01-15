@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use pican_core::copy_arrayvec::CopyArrayVec;
+use pican_core::properties::OutputProperty;
 use pican_core::register::Register;
 use serde::{Deserialize, Serialize};
 
@@ -28,8 +29,16 @@ pub enum Statement {
     Op(Op),
     RegisterBind(RegisterBind),
     Uniform(UniformDecl),
-    Constant(ConstantDecl)
+    Constant(ConstantDecl),
+    OutputBind(OutputBind)
 }
+}
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+pub struct OutputBind<'a> {
+    pub alias: Option<IrNode<Ident<'a>>>,
+    pub property: IrNode<OutputProperty>,
+    pub register: Option<IrNode<Register>>,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug, EnumDiscriminants)]

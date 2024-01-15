@@ -25,7 +25,7 @@ pub struct Module<'a> {
 pub struct OutputBinding<'a> {
     pub register: Option<IrNode<Register>>,
     pub alias: Option<IrNode<Ident<'a>>>,
-    pub property: OutputProperty,
+    pub property: IrNode<OutputProperty>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy, Hash)]

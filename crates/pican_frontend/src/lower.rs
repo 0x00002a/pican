@@ -38,13 +38,14 @@ mod lowering {
         copy_arrayvec::CopyArrayVec,
         diagnostics::{DiagnosticBuilder, FatalErrorEmitted},
         ir::{Float, Ident, IrNode, SwizzleDim, SwizzleDims},
+        properties::OutputProperty,
         register::Register,
         PResult,
     };
 
     use crate::ast::{
-        Constant, ConstantDecl, FunctionDecl, Op, Operand, Operands, Statement, Stmt, SwizzleExpr,
-        UniformDecl, UniformTy,
+        Constant, ConstantDecl, FunctionDecl, Op, Operand, Operands, OutputBind, Statement, Stmt,
+        SwizzleExpr, UniformDecl, UniformTy,
     };
     use pican_pir::bindings::{self as pib, SwizzleValue};
     use pican_pir::ir as pir;
@@ -143,6 +144,18 @@ mod lowering {
                     Ok(())
                 }
                 Statement::Comment(_) => Ok(()),
+                Statement::OutputBind(o) => {
+                    if let Some(ident) = o.get().alias {
+                        self.check_non_aliased(ident)?;
+                    }
+                    let o = o.lower(self)?;
+                    let o = o.map(|o| -> &_ { self.alloc.alloc(o) });
+                    if let Some(ident) = o.get().alias {
+                        self.bindings.define(ident, o);
+                    }
+                    self.outputs.push(o);
+                    Ok(())
+                }
             }
         }
         fn lower<L: Lower>(&self, t: L) -> Result<L::Pir<'a>, FatalErrorEmitted> {
@@ -156,6 +169,20 @@ mod lowering {
             self,
             ctx: &PirLower<'a, 'c, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted>;
+    }
+    impl<'b> Lower for OutputBind<'b> {
+        type Pir<'a> = pir::OutputBinding<'a>;
+
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            Ok(pir::OutputBinding {
+                register: self.register,
+                alias: self.alias.map(|i| i.lower(ctx)).transpose()?,
+                property: self.property,
+            })
+        }
     }
     impl<'b> Lower for Constant<'b> {
         type Pir<'a> = pir::ConstantUniform<'a>;

@@ -1,7 +1,8 @@
 use super::ast::Stmt;
 use crate::ast::{
     self, Block, Constant, ConstantDecl, ConstantDiscriminants, FunctionDecl, Ident, Op, OpCode,
-    Operand, Operands, RegisterBind, Statement, SwizzleExpr, Uniform, UniformDecl, UniformTy,
+    Operand, Operands, OutputBind, RegisterBind, Statement, SwizzleExpr, Uniform, UniformDecl,
+    UniformTy,
 };
 use crate::parse_ext::ParserExt;
 use nom::bytes::complete::take_until;
@@ -26,6 +27,7 @@ use nom_locate::LocatedSpan;
 use pican_core::alloc::Bump;
 use pican_core::ir::{Float, SwizzleDim, SwizzleDims};
 use pican_core::ir::{IrNode, Span};
+use pican_core::properties::OutputProperty;
 use pican_core::register::{Register, RegisterKind};
 use pican_core::span::{FileId, Location};
 use std::rc::Rc;
@@ -234,6 +236,7 @@ where
 
 pub fn stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
     branch::alt((
+        nfo(output_bind).map(Into::into),
         nfo(constant_decl).map(Into::into),
         nfo(register_bind).map(Into::into),
         nfo(uniform_decl).map(Into::into),
@@ -445,6 +448,50 @@ fn entry_point<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, FunctionDecl<'a>> 
     Ok((i, FunctionDecl { name, block }))
 }
 
+fn output_property<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OutputProperty> {
+    penum(&[
+        ("position", OutputProperty::Position),
+        ("pos", OutputProperty::Position),
+        ("normalquat", OutputProperty::NormalQuat),
+        ("nquat", OutputProperty::NormalQuat),
+        ("color", OutputProperty::Color),
+        ("clr", OutputProperty::Color),
+        ("texcoord0", OutputProperty::TexCoord0),
+        ("tcoord0", OutputProperty::TexCoord0),
+        ("texcoord0w", OutputProperty::TexCoord0W),
+        ("tcoord0w", OutputProperty::TexCoord0W),
+        ("texcoord1", OutputProperty::TexCoord1),
+        ("tcoord1", OutputProperty::TexCoord1),
+        ("texcoord2", OutputProperty::TexCoord2),
+        ("tcoord2", OutputProperty::TexCoord2),
+        ("view", OutputProperty::View),
+        ("dummy", OutputProperty::Dummy),
+    ])
+    .parse(i)
+}
+fn output_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OutputBind<'a>> {
+    let (i, _) = tag(".out")(i)?;
+    let (i, _) = space(i)?;
+    let (i, alias) = (tag("-").map(|_| None))
+        .or(nfo(ident).map(Some))
+        .req("missing alias for .out, expecting - or alias identifier")
+        .parse(i)?;
+    let (i, _) = space(i)?;
+    let (i, property) = nfo(output_property)
+        .req("unrecognised property name")
+        .parse(i)?;
+    let (i, _) = space(i)?;
+    let (i, register) = ncm::opt(nfo(register))(i)?;
+    Ok((
+        i,
+        OutputBind {
+            alias,
+            property,
+            register,
+        },
+    ))
+}
+
 fn opcode<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, OpCode> {
     for (name, val) in OpCode::variants_lookup() {
         let (i_r, ok) = ncm::opt(tag(name))(i)?;
@@ -578,12 +625,16 @@ mod tests {
         combinator::eof,
         Parser,
     };
-    use pican_core::ir::{Float, IrNode};
     use pican_core::span::Files;
     use pican_core::{
         alloc::Bump,
         register::{Register, RegisterKind},
     };
+    use pican_core::{
+        ir::{Float, IrNode},
+        properties::OutputProperty,
+    };
+    use pican_pir::ir::OutputBinding;
 
     use crate::ast::{OpCode, Stmt, UniformTy};
 
@@ -759,5 +810,21 @@ mod tests {
         let ctx = TestCtx::new();
         let r = ctx.run_parser("0.0", super::float).unwrap();
         assert_eq!(r, Float::new(0.0).unwrap());
+    }
+
+    #[test]
+    fn parse_output_binding() {
+        let ctx = TestCtx::new();
+        let r = ctx
+            .run_parser(".out n tcoord0", super::output_bind)
+            .unwrap();
+        assert_eq!(r.alias.unwrap().get(), "n");
+        assert_eq!(r.property.get(), &OutputProperty::TexCoord0);
+    }
+    #[test]
+    fn parse_property_name() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser("pos", super::output_property).unwrap();
+        assert_eq!(r, OutputProperty::Position);
     }
 }
