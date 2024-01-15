@@ -87,7 +87,7 @@ mod lowering {
                     self.entry_points.push(pt);
                     Ok(())
                 }
-                Statement::Comment(_) => todo!(),
+                Statement::Comment(_) => Ok(()),
                 Statement::Op(o) => self.ctx.diag.fatal(
                     DiagnosticBuilder::error()
                         .at(&o)
