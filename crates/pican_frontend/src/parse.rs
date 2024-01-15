@@ -273,7 +273,7 @@ fn ident_word<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, &'a str> {
 }
 fn register<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, Register> {
     for reg_kind in RegisterKind::all() {
-        let p = nmc::char(reg_kind.prefix()).ignore_then(nmc::u32.req("register index"));
+        let p = nmc::char(reg_kind.prefix()).ignore_then(nmc::u32.ctx("expected register index"));
         let (i_r, r) = ncm::opt(p)(i)?;
         i = i_r;
         if let Some(index) = r {
@@ -286,7 +286,7 @@ fn register<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, Register> {
             ));
         }
     }
-    ncm::fail(i)
+    ncm::fail.ctx("unknown register prefix").parse(i)
 }
 pub fn register_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, RegisterBind<'a>> {
     let (i, _) = tag(".alias")(i)?;
@@ -298,11 +298,14 @@ pub fn register_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, RegisterBind
 }
 
 pub fn ident<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Ident<'a>> {
-    let keywords = or_kw! {
-        mov, dp4
-    };
-    let not_kw = ncm::not(keywords);
-    not_kw.ignore_then(ident_word).map(Ident::new).parse(i)
+    let not_reg = ncm::not(register);
+    let not_op = ncm::not(opcode);
+    not_reg
+        .ctx("expected identifier but got register name")
+        .ignore_then(not_op.ctx("expected identifier but got opcode"))
+        .ignore_then(ident_word)
+        .map(Ident::new)
+        .parse(i)
 }
 fn f32<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, f32> {
     let frac_part = nom::multi::fold_many1(
@@ -501,7 +504,7 @@ fn opcode<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, OpCode> {
             i = i_r
         }
     }
-    ncm::fail(i)
+    ncm::fail.ctx("unknown opcode").parse(i)
 }
 fn swizzle_expr<'a, 'p, T, E, P>(
     mut p: P,
@@ -667,20 +670,27 @@ mod tests {
     #[test]
     fn parse_mov_op() {
         let ctx = TestCtx::new();
-        let mov = ctx.run_parser("mov dst, r2", super::op).unwrap();
+        let mov = ctx.run_parser("mov mlk, r2", super::op).unwrap();
         assert_eq!(mov.opcode.get(), &OpCode::Mov);
         let operands = mov.operands.get().0;
         assert_eq!(operands.len(), 2);
         assert_eq!(
             operands[0].get().target.get().try_as_var().unwrap().get(),
-            "dst"
+            "mlk"
         );
     }
     #[test]
     fn parse_ident_with_num() {
         let ctx = TestCtx::new();
-        let res = ctx.run_parser("r1", super::ident).unwrap();
-        assert_eq!(res, "r1");
+        let res = ctx.run_parser("ml", super::ident).unwrap();
+        assert_eq!(res, "ml");
+    }
+
+    #[test]
+    fn cannot_parse_ident_if_reg() {
+        let ctx = TestCtx::new();
+        let res = ctx.run_parser("r1", super::ident);
+        assert!(res.is_err());
     }
 
     #[test]
