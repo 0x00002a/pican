@@ -9,7 +9,7 @@ use crate::parse_ext::ParserExt;
 use nom::character::complete::{self as nmc};
 
 use nom::multi::{fold_many0, many0_count, many1, many_till};
-use nom::sequence::{tuple};
+use nom::sequence::tuple;
 use nom::{
     branch::{self},
     bytes::complete::tag,
@@ -29,8 +29,7 @@ use pican_core::ir::{Float, HasSpan, SwizzleDim, SwizzleDims};
 use pican_core::ir::{IrNode, Span};
 use pican_core::properties::OutputProperty;
 use pican_core::register::{Register, RegisterKind};
-use pican_core::span::{FileId};
-
+use pican_core::span::FileId;
 
 #[derive(Clone, Copy)]
 struct InputContext<'a> {
@@ -38,6 +37,7 @@ struct InputContext<'a> {
     file: FileId,
 }
 impl<'a> InputContext<'a> {
+    #[allow(unused)]
     pub fn alloc<A: Copy>(&self, val: A) -> &'a A {
         self.area.alloc(val)
     }
@@ -61,14 +61,7 @@ impl<'a> InputContext<'a> {
 type Nfo<T> = IrNode<T>;
 
 type Pres<'a, 'p, T, I = Input<'a, &'p str>, E = nom::error::VerboseError<I>> = IResult<I, T, E>;
-type NfoRes<'a, 'p, T> = Pres<'a, 'p, Nfo<T>>;
-pub type Input<'a, T> = LocatedSpan<T, InputContext<'a>>;
-
-macro_rules! or_kw {
-        ($($c:ident),* $(,)?) => {
-            ::nom::combinator::fail $(.or(tag(stringify!($c))))*
-        }
-    }
+type Input<'a, T> = LocatedSpan<T, InputContext<'a>>;
 
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
 /// trailing whitespace, returning the output of `inner`.
@@ -157,7 +150,7 @@ where
 {
     ws(tag(ch))
 }
-pub fn many0_in<'a, T: Clone + InputLength, O, E: ParseError<Input<'a, T>>>(
+fn many0_in<'a, T: Clone + InputLength, O, E: ParseError<Input<'a, T>>>(
     mut f: impl Parser<Input<'a, T>, O, E>,
 ) -> impl Parser<Input<'a, T>, pican_core::alloc::collections::Vec<'a, O>, E> {
     move |i: Input<'a, T>| {
@@ -201,14 +194,7 @@ where
     }
 }
 
-fn lift<I, O, Ot, E: ParseError<I>, F>(inner: F) -> impl FnMut(I) -> IResult<I, Nfo<Ot>, E>
-where
-    F: Fn(I) -> IResult<I, Nfo<O>, E>,
-    Ot: From<O>,
-{
-    ncm::map(inner, |n| n.lift())
-}
-pub fn nfo<'a, I, O, E: ParseError<Input<'a, I>>, F>(
+fn nfo<'a, I, O, E: ParseError<Input<'a, I>>, F>(
     mut inner: F,
 ) -> impl FnMut(Input<'a, I>) -> IResult<Input<'a, I>, Nfo<O>, E>
 where
@@ -224,17 +210,7 @@ where
     }
 }
 
-fn value<'a, I, O: Clone, Oe, E: ParseError<Input<'a, I>>, F>(
-    val: O,
-    inner: F,
-) -> impl FnMut(Input<'a, I>) -> IResult<Input<'a, I>, Nfo<O>, E>
-where
-    F: Parser<Input<'a, I>, Oe, E>,
-{
-    nfo(ncm::value(val, inner))
-}
-
-pub fn stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
+fn stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
     branch::alt((
         nfo(input_bind).map(Into::into),
         nfo(output_bind).map(Into::into),
@@ -289,7 +265,7 @@ fn register<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, Register> {
     }
     ncm::fail.ctx("unknown register prefix").parse(i)
 }
-pub fn register_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, RegisterBind<'a>> {
+fn register_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, RegisterBind<'a>> {
     let (i, _) = tag(".alias")(i)?;
     let (i, _) = space(i)?;
     let (i, name) = nfo(ident.req("expected identifier for alias"))(i)?;
@@ -301,7 +277,7 @@ pub fn register_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, RegisterBind
     Ok((i, RegisterBind { name, reg }))
 }
 
-pub fn ident<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Ident<'a>> {
+fn ident<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Ident<'a>> {
     let not_reg = ncm::not(register);
     let not_op = ncm::not(opcode);
     not_reg
@@ -658,21 +634,13 @@ pub fn parse<'a>(arena: &'a Bump, input: &str, file: FileId) -> Result<&'a [Stmt
 mod tests {
     use std::str::FromStr;
 
-    use nom::{
-        character::complete::{satisfy},
-        combinator::eof,
-        Parser,
-    };
+    use nom::{character::complete::satisfy, combinator::eof, Parser};
     use pican_core::span::Files;
     use pican_core::{
         alloc::Bump,
         register::{Register, RegisterKind},
     };
-    use pican_core::{
-        ir::{Float},
-        properties::OutputProperty,
-    };
-    
+    use pican_core::{ir::Float, properties::OutputProperty};
 
     use crate::ast::{OpCode, Stmt, UniformTy};
 
@@ -686,6 +654,7 @@ mod tests {
             Self { arena: Bump::new() }
         }
 
+        #[allow(unused)]
         fn parse<'a>(&'a self, input: &str) -> Result<&'a [Stmt<'a>], super::ErrorKind> {
             let mut db = Files::new();
             let id = db.add("test", input);

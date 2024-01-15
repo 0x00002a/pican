@@ -1,2 +1,2 @@
-mod ops;
-mod ty;
+pub mod ops;
+pub mod ty;

@@ -1,3 +1,4 @@
+#![allow(unused)]
 use codespan_reporting::{
     files::Files,
     term::{self, termcolor::StandardStream, Config},

@@ -1,8 +1,5 @@
 use serde::{Deserialize, Serialize};
-use strum::{
-    Display, EnumIter, EnumString, EnumVariantNames, IntoEnumIterator, VariantIterator,
-    VariantNames,
-};
+use strum::{Display, EnumIter, EnumString, EnumVariantNames, IntoEnumIterator, VariantNames};
 
 #[derive(
     EnumString,
