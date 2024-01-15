@@ -37,5 +37,10 @@ pub fn parse_and_lower<'a, S: AsRef<str>>(
             return None;
         }
     };
-    Some(to.lower(ctx, ast))
+    let (m, e) = to.lower(ctx, ast);
+    if e.is_some() {
+        None
+    } else {
+        Some(m)
+    }
 }

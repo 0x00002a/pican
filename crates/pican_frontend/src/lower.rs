@@ -1,6 +1,7 @@
 use pican_core::{
     alloc::Bump,
     context::{IrContext, PicanContext},
+    diagnostics::FatalErrorEmitted,
     ir::IrNode,
     PError, PResult,
 };
@@ -14,19 +15,22 @@ pub trait FrontendToPirCtx {
         &'a self,
         ctx: &PicanContext<S>,
         ir: &[ast::Stmt],
-    ) -> pir::ir::Module<'a>;
+    ) -> (pir::ir::Module<'a>, Option<FatalErrorEmitted>);
 }
 impl FrontendToPirCtx for IrContext {
     fn lower<'a, S: AsRef<str>>(
         &'a self,
         ctx: &PicanContext<S>,
         ir: &[ast::Stmt],
-    ) -> pir::ir::Module<'a> {
+    ) -> (pir::ir::Module<'a>, Option<FatalErrorEmitted>) {
         let mut l = lowering::PirLower::new(self.arena(), ctx);
+        let mut failed = None;
         for stmt in ir {
-            let _ = l.lower_toplevel_stmt(*stmt.get());
+            if let Err(e) = l.lower_toplevel_stmt(*stmt.get()) {
+                failed.replace(e);
+            }
         }
-        l.build_module()
+        (l.build_module(), failed)
     }
 }
 
@@ -400,13 +404,14 @@ mod lowering {
             ctx: &PirLower<'a, 'c, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             let name = ctx.lower(self.name)?;
+            let mut failed = None;
             let ops = self
                 .block
                 .map(|b| {
                     b.statements.map(|stmts| {
                         let mut ops = BumpVec::new_in(ctx.alloc);
                         for stmt in stmts {
-                            let Ok(op) = stmt
+                            match stmt
                                 .map(|st| {
                                     let Statement::Op(op) = st else {
                                         return ctx.ctx.diag.fatal(
@@ -419,15 +424,22 @@ mod lowering {
                                     ctx.lower(op)
                                 })
                                 .transpose()
-                            else {
-                                continue;
-                            };
-                            ops.push(op.concat());
+                            {
+                                Ok(op) => {
+                                    ops.push(op.concat());
+                                }
+                                Err(e) => {
+                                    failed.replace(e);
+                                }
+                            }
                         }
                         ops
                     })
                 })
                 .concat();
+            if let Some(f) = failed {
+                return Err(f);
+            }
             let ops = ops.map(|v| v.into_bump_slice());
             Ok(pir::EntryPoint { name, ops })
         }
