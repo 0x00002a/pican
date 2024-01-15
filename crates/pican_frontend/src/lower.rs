@@ -410,7 +410,7 @@ mod lowering {
                 .map(|b| {
                     b.statements.map(|stmts| {
                         let mut ops = BumpVec::new_in(ctx.alloc);
-                        for stmt in stmts {
+                        for stmt in stmts.iter().filter(|st| !st.get().is_comment()) {
                             match stmt
                                 .map(|st| {
                                     let Statement::Op(op) = st else {
