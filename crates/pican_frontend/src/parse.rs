@@ -2,7 +2,7 @@ use super::ast::Stmt;
 use crate::ast::{Block, FunctionDecl, Ident, Op, OpCode, Operand, Operands, Statement};
 use crate::parse_ext::ParserExt;
 use nom::bytes::complete::take_until;
-use nom::character::complete::{self as nmc, space1};
+use nom::character::complete::{self as nmc, line_ending, not_line_ending, space1};
 use nom::error::context;
 use nom::multi::{fold_many0, many0, many0_count, many1, many_till};
 use nom::sequence::{pair, preceded, separated_pair, terminated, tuple};
@@ -73,8 +73,10 @@ where
         + InputTake
         + FindSubstring<&'a str>
         + Compare<&'a str>
+        + nom::Slice<std::ops::RangeFrom<usize>>
         + InputIter,
     <I as InputTakeAtPosition>::Item: AsChar + Clone,
+    <I as nom::InputIter>::Item: nom::AsChar,
 {
     delimited(space, inner, space)
 }
@@ -88,8 +90,10 @@ where
         + InputTake
         + FindSubstring<&'a str>
         + Compare<&'a str>
-        + InputIter,
+        + InputIter
+        + nom::Slice<std::ops::RangeFrom<usize>>,
     <I as InputTakeAtPosition>::Item: AsChar + Clone,
+    <I as nom::InputIter>::Item: nom::AsChar,
 {
     many0_count(nmc::multispace1.map(|_| ()).or(comment))
         .map(|_| ())
@@ -104,11 +108,15 @@ where
         + FindSubstring<&'a str>
         + InputLength
         + InputIter
-        + Compare<&'a str>,
+        + Compare<&'a str>
+        + nom::Slice<std::ops::RangeFrom<usize>>,
     <I as InputTakeAtPosition>::Item: AsChar + Clone,
+    <I as nom::InputIter>::Item: nom::AsChar,
 {
-    let (i, _) = preceded(tag("--[["), take_until("]]--"))
-        .or(preceded(tag("--"), take_until("\n")))
+    let (i, _) = tag(";")
+        .ignore_then(many0_count(
+            ncm::not(tag("\n").or(ncm::eof)).ignore_then(nmc::anychar),
+        ))
         .parse(i)?;
     Ok((i, ()))
 }
@@ -121,9 +129,11 @@ where
         + InputLength
         + FindSubstring<&'a str>
         + InputIter
+        + nom::Slice<std::ops::RangeFrom<usize>>
         + Compare<&'a str>,
     T: InputLength + Clone,
     <I as InputTakeAtPosition>::Item: AsChar + Clone,
+    <I as nom::InputIter>::Item: nom::AsChar,
 {
     ws(tag(ch))
 }
@@ -465,6 +475,11 @@ mod tests {
         let ctx = TestCtx::new();
         let res = ctx.run_parser("v0", super::register).unwrap();
         assert_eq!(res, Register::new(RegisterKind::Input, 0));
+    }
+    #[test]
+    fn parse_comment() {
+        let ctx = TestCtx::new();
+        ctx.run_parser("; sup", super::comment).unwrap();
     }
 
     #[test]
