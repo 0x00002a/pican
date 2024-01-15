@@ -39,9 +39,9 @@ pub struct ConstantDecl<'a> {
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct UniformDecl<'a> {
     /// The type of the uniforms declared
-    pub ty: UniformTy,
+    pub ty: IrNode<UniformTy>,
     /// The uniforms bound in this decl e.g. .fvec m1[4], m2, m5[4]
-    pub uniforms: &'a [Uniform<'a>],
+    pub uniforms: IrNode<&'a [IrNode<Uniform<'a>>]>,
 }
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub enum UniformTy {

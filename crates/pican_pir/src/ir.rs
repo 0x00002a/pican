@@ -8,6 +8,8 @@ use pican_core::{
     register::Register,
 };
 
+use crate::ty::UniformTy;
+
 use super::bindings::Bindings;
 
 /// Single shader module
@@ -40,4 +42,11 @@ pub enum Operand<'a> {
 pub struct WideOperand {
     /// The relative address of the input, e.g. uniform[1]
     pub relative_address: usize,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
+pub struct Uniform {
+    pub ty: IrNode<UniformTy>,
+    /// Dimension of the uniform, for non-arrays this is None
+    pub dimension: Option<IrNode<usize>>,
 }

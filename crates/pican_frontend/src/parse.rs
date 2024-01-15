@@ -328,12 +328,12 @@ fn uniform<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Uniform<'a>> {
 
 fn uniform_decl<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, UniformDecl<'a>> {
     let (i, _) = tag(".")(i)?;
-    let (i, ty) = uniform_ty(i)?;
+    let (i, ty) = nfo(uniform_ty)(i)?;
     let (i, _) = space(i)?;
-    let (i, uniforms) = nom::multi::separated_list1(tkn(","), uniform)
+    let (i, uniforms) = nfo(nom::multi::separated_list1(tkn(","), nfo(uniform)))
         .req("expected uniform name")
         .parse(i)?;
-    let uniforms = i.extra.alloc_slice(&uniforms);
+    let uniforms = uniforms.map(|u| -> &'a _ { i.extra.alloc_slice(&u) });
     Ok((i, UniformDecl { ty, uniforms }))
 }
 fn entry_point<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, FunctionDecl<'a>> {
@@ -582,9 +582,9 @@ mod tests {
     fn parse_fvec_uniform() {
         let ctx = TestCtx::new();
         let r = ctx.run_parser(".fvec m[5]", super::uniform_decl).unwrap();
-        assert_eq!(r.ty, UniformTy::Float);
-        assert_eq!(r.uniforms.len(), 1);
-        let u = &r.uniforms[0];
+        assert_eq!(r.ty.get(), &UniformTy::Float);
+        assert_eq!(r.uniforms.get().len(), 1);
+        let u = &r.uniforms.get()[0].get();
         assert_eq!(u.name.get(), "m");
         assert_eq!(u.dimensions.unwrap().get(), &5);
     }

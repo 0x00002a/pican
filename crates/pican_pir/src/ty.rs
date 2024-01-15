@@ -9,6 +9,8 @@ pub enum Ty {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Debug, Deserialize, Hash)]
-pub struct UniformTy {
-    pub size: usize,
+pub enum UniformTy {
+    Bool,
+    Integer,
+    Float,
 }

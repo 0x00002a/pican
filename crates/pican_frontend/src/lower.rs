@@ -42,7 +42,9 @@ mod lowering {
         PResult,
     };
 
-    use crate::ast::{FunctionDecl, Op, Operand, Operands, Statement, Stmt};
+    use crate::ast::{
+        FunctionDecl, Op, Operand, Operands, Statement, Stmt, UniformDecl, UniformTy,
+    };
     use pican_pir::bindings as pib;
     use pican_pir::ir as pir;
 
@@ -87,7 +89,6 @@ mod lowering {
                     self.entry_points.push(pt);
                     Ok(())
                 }
-                Statement::Comment(_) => Ok(()),
                 Statement::Op(o) => self.ctx.diag.fatal(
                     DiagnosticBuilder::error()
                         .at(&o)
@@ -102,14 +103,28 @@ mod lowering {
                     self.bindings.define(name, b.get().reg);
                     Ok(())
                 }
-                Statement::Uniform(_) => todo!(),
+                Statement::Uniform(u) => {
+                    let ty = u.get().ty.lower(self)?;
+                    for unif in u.get().uniforms.get().iter() {
+                        self.check_non_aliased(unif.get().name)?;
+
+                        // fixme: if this isn't the first one and fails then we catch higher up we "leak" arena mem
+                        let name = unif.get().name.lower(self)?;
+                        let dimension = unif.get().dimensions.map(|d| d.map(|i| i as usize));
+                        self.bindings
+                            .define(name, unif.map(|_| pir::Uniform { ty, dimension }));
+                    }
+                    Ok(())
+                }
                 Statement::Constant(_) => todo!(),
+                Statement::Comment(_) => Ok(()),
             }
         }
         fn lower<L: Lower>(&self, t: L) -> Result<L::Pir<'a>, FatalErrorEmitted> {
             t.lower(self)
         }
     }
+
     trait Lower {
         type Pir<'a>;
         fn lower<'a, 'c, S: AsRef<str>>(
@@ -117,6 +132,23 @@ mod lowering {
             ctx: &PirLower<'a, 'c, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted>;
     }
+    impl Lower for UniformTy {
+        type Pir<'a> = pican_pir::ty::UniformTy;
+
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            _ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            use pican_pir::ty as pit;
+            let t = match self {
+                UniformTy::Bool => pit::UniformTy::Bool,
+                UniformTy::Integer => pit::UniformTy::Integer,
+                UniformTy::Float => pit::UniformTy::Float,
+            };
+            Ok(t)
+        }
+    }
+
     impl<'b> Lower for Ident<'b> {
         type Pir<'a> = Ident<'a>;
 
