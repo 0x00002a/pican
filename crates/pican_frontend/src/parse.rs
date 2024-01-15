@@ -294,7 +294,10 @@ pub fn register_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, RegisterBind
     let (i, _) = space(i)?;
     let (i, name) = nfo(ident.req("expected identifier for alias"))(i)?;
     let (i, _) = space(i)?;
-    let (i, reg) = nfo(swizzle_expr(register).req("expected register for alias"))(i)?;
+    let (i, reg) = nfo(
+        swizzle_expr(register.map(Into::into).or(ident.map(Into::into)))
+            .req("expected register for alias"),
+    )(i)?;
     Ok((i, RegisterBind { name, reg }))
 }
 
@@ -806,7 +809,10 @@ mod tests {
         let ctx = TestCtx::new();
         let r = ctx.run_parser(".alias m r0", super::register_bind).unwrap();
         assert_eq!(r.name.get(), "m");
-        assert_eq!(r.reg.get().target.get(), &Register::from_str("r0").unwrap());
+        assert_eq!(
+            r.reg.get().target.get().try_as_register().unwrap(),
+            &Register::from_str("r0").unwrap()
+        );
     }
 
     #[test]

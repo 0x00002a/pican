@@ -54,6 +54,8 @@ impl<'a> Bindings<'a> {
 #[typesum::sumtype(only = from)]
 pub enum BindingValue<'a> {
     SwizzleRegister(SwizzleValue<'a, Register>),
+    SwizzleVar(SwizzleValue<'a, Ident<'a>>),
+    Alias(Ident<'a>),
     Register(Register),
     Uniform(Uniform),
     Constant(ConstantUniform<'a>),

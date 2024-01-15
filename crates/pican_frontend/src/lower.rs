@@ -44,8 +44,8 @@ mod lowering {
     };
 
     use crate::ast::{
-        Constant, ConstantDecl, FunctionDecl, Op, Operand, Operands, OutputBind, Statement, Stmt,
-        SwizzleExpr, UniformDecl, UniformTy,
+        Constant, ConstantDecl, FunctionDecl, Op, Operand, Operands, OutputBind,
+        RegisterBindTarget, Statement, Stmt, SwizzleExpr, UniformDecl, UniformTy,
     };
     use pican_pir::bindings::{self as pib, SwizzleValue};
     use pican_pir::ir as pir;
@@ -362,7 +362,7 @@ mod lowering {
         }
     }
 
-    impl<'b> Lower for SwizzleExpr<'b, Register> {
+    impl<'b> Lower for SwizzleExpr<'b, RegisterBindTarget<'b>> {
         type Pir<'a> = pib::BindingValue<'a>;
 
         fn lower<'a, 'c, S: AsRef<str>>(
@@ -370,12 +370,24 @@ mod lowering {
             ctx: &PirLower<'a, 'c, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             if let Some(swiz) = self.swizzle {
-                Ok(pib::BindingValue::SwizzleRegister(SwizzleValue {
-                    swizzle: swiz.lower(ctx)?,
-                    target: self.target,
-                }))
+                let target = self.target.map(|target| match target {
+                    RegisterBindTarget::Register(r) => {
+                        Ok(pib::BindingValue::SwizzleRegister(SwizzleValue {
+                            swizzle: swiz.lower(ctx)?,
+                            target: self.target.map(|_| r),
+                        }))
+                    }
+                    RegisterBindTarget::Var(v) => Ok(pib::BindingValue::SwizzleVar(SwizzleValue {
+                        swizzle: swiz.lower(ctx)?,
+                        target: self.target.map(|_| v.lower(ctx)).transpose()?,
+                    })),
+                });
+                target.into_inner()
             } else {
-                Ok(pib::BindingValue::Register(self.target.into_inner()))
+                match self.target.get() {
+                    RegisterBindTarget::Register(r) => Ok(pib::BindingValue::Register(*r)),
+                    RegisterBindTarget::Var(v) => Ok(pib::BindingValue::Alias(v.lower(ctx)?)),
+                }
             }
         }
     }

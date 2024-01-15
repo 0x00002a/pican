@@ -10,6 +10,7 @@ use pican_core::ir::{Float, IrNode, SwizzleDims};
 pub use pican_core::ir::Ident;
 pub use pican_core::ops::OpCode;
 use strum::EnumDiscriminants;
+use typesum::sumtype;
 
 macro_rules! sum_node {
     ($vi:vis enum $name:ident {
@@ -90,7 +91,14 @@ pub struct SwizzleExpr<'a, T> {
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct RegisterBind<'a> {
     pub name: IrNode<Ident<'a>>,
-    pub reg: IrNode<SwizzleExpr<'a, Register>>,
+    pub reg: IrNode<SwizzleExpr<'a, RegisterBindTarget<'a>>>,
+}
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+#[sumtype]
+pub enum RegisterBindTarget<'a> {
+    Register(Register),
+    Var(Ident<'a>),
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
