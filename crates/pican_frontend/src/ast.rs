@@ -59,8 +59,8 @@ pub struct Uniform<'a> {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct RegisterBind<'a> {
-    pub reg: IrNode<Register>,
     pub name: IrNode<Ident<'a>>,
+    pub reg: IrNode<Register>,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]

@@ -1,7 +1,7 @@
 use super::ast::Stmt;
 use crate::ast::{
-    self, Block, FunctionDecl, Ident, Op, OpCode, Operand, Operands, Statement, Uniform,
-    UniformDecl, UniformTy,
+    self, Block, FunctionDecl, Ident, Op, OpCode, Operand, Operands, RegisterBind, Statement,
+    Uniform, UniformDecl, UniformTy,
 };
 use crate::parse_ext::ParserExt;
 use nom::bytes::complete::take_until;
@@ -233,6 +233,7 @@ where
 
 pub fn stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
     branch::alt((
+        nfo(register_bind).map(Into::into),
         nfo(uniform_decl).map(Into::into),
         nfo(comment)
             .map(|c| {
@@ -281,6 +282,14 @@ fn register<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, Register> {
         }
     }
     ncm::fail(i)
+}
+pub fn register_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, RegisterBind<'a>> {
+    let (i, _) = tag(".alias")(i)?;
+    let (i, _) = space(i)?;
+    let (i, name) = nfo(ident.req("expected identifier for alias"))(i)?;
+    let (i, _) = space(i)?;
+    let (i, reg) = nfo(register.req("expected register for alias"))(i)?;
+    Ok((i, RegisterBind { name, reg }))
 }
 
 pub fn ident<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Ident<'a>> {
@@ -587,5 +596,12 @@ mod tests {
         let u = &r.uniforms.get()[0].get();
         assert_eq!(u.name.get(), "m");
         assert_eq!(u.dimensions.unwrap().get(), &5);
+    }
+    #[test]
+    fn parse_alias() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser(".alias m r0", super::register_bind).unwrap();
+        assert_eq!(r.name.get(), "m");
+        assert_eq!(r.reg.get(), &Register::from_str("r0").unwrap());
     }
 }
