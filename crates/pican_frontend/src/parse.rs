@@ -1,5 +1,8 @@
 use super::ast::Stmt;
-use crate::ast::{self, Block, FunctionDecl, Ident, Op, OpCode, Operand, Operands, Statement};
+use crate::ast::{
+    self, Block, FunctionDecl, Ident, Op, OpCode, Operand, Operands, Statement, Uniform,
+    UniformDecl, UniformTy,
+};
 use crate::parse_ext::ParserExt;
 use nom::bytes::complete::take_until;
 use nom::character::complete::{self as nmc, line_ending, not_line_ending, space1};
@@ -230,6 +233,7 @@ where
 
 pub fn stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
     branch::alt((
+        nfo(uniform_decl).map(Into::into),
         nfo(comment)
             .map(|c| {
                 c.map(|s: Input<'a, &'p str>| i.extra.alloc_str(s.fragment()))
@@ -300,6 +304,37 @@ fn float<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Float> {
     } else {
         ncm::fail(i)
     }
+}
+
+fn uniform_ty<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, UniformTy> {
+    penum(&[
+        ("fvec", UniformTy::Float),
+        ("ivec", UniformTy::Integer),
+        ("bool", UniformTy::Bool),
+    ])
+    .parse(i)
+}
+fn uniform<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Uniform<'a>> {
+    fn dims<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, u8> {
+        tag("[")
+            .ignore_then(nmc::u8.req("missing size in uniform dims"))
+            .then_ignore(tkn("]").req("missing closing ] for uniform dimensions"))
+            .parse(i)
+    }
+    let (i, name) = nfo(ident)(i)?;
+    let (i, dimensions) = ncm::opt(nfo(dims))(i)?;
+    Ok((i, Uniform { name, dimensions }))
+}
+
+fn uniform_decl<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, UniformDecl<'a>> {
+    let (i, _) = tag(".")(i)?;
+    let (i, ty) = uniform_ty(i)?;
+    let (i, _) = space(i)?;
+    let (i, uniforms) = nom::multi::separated_list1(tkn(","), uniform)
+        .req("expected uniform name")
+        .parse(i)?;
+    let uniforms = i.extra.alloc_slice(&uniforms);
+    Ok((i, UniformDecl { ty, uniforms }))
 }
 fn entry_point<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, FunctionDecl<'a>> {
     pub fn block<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Block<'a>> {
@@ -421,7 +456,7 @@ mod tests {
         register::{Register, RegisterKind},
     };
 
-    use crate::ast::{OpCode, Stmt};
+    use crate::ast::{OpCode, Stmt, UniformTy};
 
     use super::{Input, PError};
 
@@ -534,5 +569,23 @@ mod tests {
         let ctx = TestCtx::new();
         let ep = ctx.run_parser(".proc m .end", super::entry_point).unwrap();
         assert_eq!(ep.name.get(), "m")
+    }
+
+    #[test]
+    fn parse_uniform() {
+        let ctx = TestCtx::new();
+        let u = ctx.run_parser("m[5]", super::uniform).unwrap();
+        assert_eq!(u.name.get(), "m");
+        assert_eq!(u.dimensions.unwrap().get(), &5);
+    }
+    #[test]
+    fn parse_fvec_uniform() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser(".fvec m[5]", super::uniform_decl).unwrap();
+        assert_eq!(r.ty, UniformTy::Float);
+        assert_eq!(r.uniforms.len(), 1);
+        let u = &r.uniforms[0];
+        assert_eq!(u.name.get(), "m");
+        assert_eq!(u.dimensions.unwrap().get(), &5);
     }
 }

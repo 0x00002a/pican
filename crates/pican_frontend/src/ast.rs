@@ -38,6 +38,20 @@ pub struct ConstantDecl<'a> {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct UniformDecl<'a> {
+    /// The type of the uniforms declared
+    pub ty: UniformTy,
+    /// The uniforms bound in this decl e.g. .fvec m1[4], m2, m5[4]
+    pub uniforms: &'a [Uniform<'a>],
+}
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+pub enum UniformTy {
+    Bool,
+    Integer,
+    Float,
+}
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+pub struct Uniform<'a> {
     pub name: IrNode<Ident<'a>>,
     /// Dimension of the uniform, None for vectors
     pub dimensions: Option<IrNode<u8>>,
