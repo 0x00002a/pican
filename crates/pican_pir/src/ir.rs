@@ -1,4 +1,3 @@
-use arrayvec::ArrayVec;
 use serde::Serialize;
 
 use pican_core::{
@@ -9,7 +8,7 @@ use pican_core::{
     register::Register,
 };
 
-use crate::{bindings::SwizzleValue, ty::UniformTy};
+use crate::ty::UniformTy;
 
 use super::bindings::Bindings;
 

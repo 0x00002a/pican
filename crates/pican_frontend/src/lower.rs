@@ -1,9 +1,6 @@
 use pican_core::{
-    alloc::Bump,
     context::{IrContext, PicanContext},
     diagnostics::FatalErrorEmitted,
-    ir::IrNode,
-    PError, PResult,
 };
 
 use pican_pir as pir;
@@ -35,21 +32,18 @@ impl FrontendToPirCtx for IrContext {
 }
 
 mod lowering {
-    use arrayvec::ArrayVec;
+    
     use pican_core::{
         alloc::{Bump, BumpVec},
         context::PicanContext,
         copy_arrayvec::CopyArrayVec,
         diagnostics::{DiagnosticBuilder, FatalErrorEmitted},
-        ir::{Float, Ident, IrNode, SwizzleDim, SwizzleDims},
-        properties::OutputProperty,
-        register::Register,
-        PResult,
+        ir::{Ident, IrNode, SwizzleDim, SwizzleDims},
     };
 
     use crate::ast::{
-        Constant, ConstantDecl, FunctionDecl, Op, Operand, OperandKind, Operands, OutputBind,
-        RegisterBindTarget, Statement, Stmt, SwizzleExpr, UniformDecl, UniformTy,
+        Constant, FunctionDecl, Op, Operand, OperandKind, Operands, OutputBind,
+        RegisterBindTarget, Statement, SwizzleExpr, UniformTy,
     };
     use pican_pir::bindings::{self as pib, SwizzleValue};
     use pican_pir::ir as pir;
@@ -79,7 +73,7 @@ mod lowering {
                 return self.ctx.diag.fatal(
                     DiagnosticBuilder::error()
                         .at(&var)
-                        .primary(format!("identifier conflicts with existing one"))
+                        .primary("identifier conflicts with existing one".to_string())
                         .note(&id, "identifier previously bound here")
                         .build(),
                 );
@@ -187,17 +181,17 @@ mod lowering {
 
     trait Lower {
         type Pir<'a>;
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            ctx: &PirLower<'a, 'c, S>,
+            ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted>;
     }
     impl<'b> Lower for OutputBind<'b> {
         type Pir<'a> = pir::OutputBinding<'a>;
 
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            ctx: &PirLower<'a, 'c, S>,
+            ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             Ok(pir::OutputBinding {
                 register: self.register,
@@ -209,9 +203,9 @@ mod lowering {
     impl<'b> Lower for Constant<'b> {
         type Pir<'a> = pir::ConstantUniform<'a>;
 
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            ctx: &PirLower<'a, 'c, S>,
+            ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             match self {
                 Constant::Integer(i) => {
@@ -257,9 +251,9 @@ mod lowering {
     impl Lower for UniformTy {
         type Pir<'a> = pican_pir::ty::UniformTy;
 
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            _ctx: &PirLower<'a, 'c, S>,
+            _ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             use pican_pir::ty as pit;
             let t = match self {
@@ -274,9 +268,9 @@ mod lowering {
     impl<'b> Lower for Ident<'b> {
         type Pir<'a> = Ident<'a>;
 
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            ctx: &PirLower<'a, 'c, S>,
+            ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             Ok(self.copy_to(ctx.alloc))
         }
@@ -284,9 +278,9 @@ mod lowering {
     impl<T: Lower> Lower for IrNode<T> {
         type Pir<'a> = IrNode<T::Pir<'a>>;
 
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            ctx: &PirLower<'a, 'c, S>,
+            ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             self.map(|i| i.lower(ctx)).transpose()
         }
@@ -294,9 +288,9 @@ mod lowering {
     impl Lower for OperandKind<'_> {
         type Pir<'a> = pir::OperandKind<'a>;
 
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            ctx: &PirLower<'a, 'c, S>,
+            ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             let r = match self {
                 OperandKind::Var(v) => pir::OperandKind::Var(ctx.lower(v)?),
@@ -309,9 +303,9 @@ mod lowering {
     impl Lower for Operands<'_> {
         type Pir<'a> = CopyArrayVec<IrNode<pir::Operand<'a>>, 4>;
 
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            ctx: &PirLower<'a, 'c, S>,
+            ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             if self.0.len() > 4 {
                 return ctx.ctx.diag.fatal(
@@ -331,9 +325,9 @@ mod lowering {
     impl Lower for Op<'_> {
         type Pir<'a> = pir::Op<'a>;
 
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            ctx: &PirLower<'a, 'c, S>,
+            ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             let opcode = self.opcode;
             let operands = ctx.lower(self.operands)?;
@@ -355,9 +349,9 @@ mod lowering {
     impl<'b> Lower for Operand<'b> {
         type Pir<'a> = pir::Operand<'a>;
 
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            ctx: &PirLower<'a, 'c, S>,
+            ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             Ok(pir::Operand {
                 kind: self.kind.lower(ctx)?,
@@ -370,9 +364,9 @@ mod lowering {
     impl<'b> Lower for SwizzleExpr<'b, RegisterBindTarget<'b>> {
         type Pir<'a> = pib::BindingValue<'a>;
 
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            ctx: &PirLower<'a, 'c, S>,
+            ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             if let Some(swiz) = self.swizzle {
                 let target = self.target.map(|target| match target {
@@ -399,9 +393,9 @@ mod lowering {
     impl Lower for FunctionDecl<'_> {
         type Pir<'a> = pir::EntryPoint<'a>;
 
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            ctx: &PirLower<'a, 'c, S>,
+            ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             let name = ctx.lower(self.name)?;
             let mut failed = None;

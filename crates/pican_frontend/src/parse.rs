@@ -5,11 +5,11 @@ use crate::ast::{
     Uniform, UniformDecl, UniformTy,
 };
 use crate::parse_ext::ParserExt;
-use nom::bytes::complete::take_until;
-use nom::character::complete::{self as nmc, line_ending, not_line_ending, space1};
-use nom::error::context;
-use nom::multi::{fold_many0, many0, many0_count, many1, many_till, separated_list1};
-use nom::sequence::{pair, preceded, separated_pair, terminated, tuple};
+
+use nom::character::complete::{self as nmc};
+
+use nom::multi::{fold_many0, many0_count, many1, many_till};
+use nom::sequence::{tuple};
 use nom::{
     branch::{self},
     bytes::complete::tag,
@@ -17,7 +17,7 @@ use nom::{
     sequence::delimited,
     IResult,
 };
-use nom::{combinator as ncm, FindSubstring, InputIter, Offset, Slice};
+use nom::{combinator as ncm, FindSubstring, InputIter, Offset};
 use nom::{
     error::{VerboseError, VerboseErrorKind},
     Parser,
@@ -29,8 +29,8 @@ use pican_core::ir::{Float, HasSpan, SwizzleDim, SwizzleDims};
 use pican_core::ir::{IrNode, Span};
 use pican_core::properties::OutputProperty;
 use pican_core::register::{Register, RegisterKind};
-use pican_core::span::{FileId, Location};
-use std::rc::Rc;
+use pican_core::span::{FileId};
+
 
 #[derive(Clone, Copy)]
 struct InputContext<'a> {
@@ -269,7 +269,7 @@ fn ident_word<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, &'a str> {
     }
     let (i, _) = ncm::peek(ident_char)(i)?;
     let (i, word) = many1(ident_char.or(nmc::satisfy(|ch| ch.is_dec_digit())))(i)?;
-    let word = pican_core::alloc::collections::String::from_iter_in(word.into_iter(), i.extra.area);
+    let word = pican_core::alloc::collections::String::from_iter_in(word, i.extra.area);
     Ok((i, word.into_bump_str()))
 }
 fn register<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, Register> {
@@ -341,7 +341,7 @@ fn float<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Float> {
     }
 }
 
-fn constant_decl<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, ConstantDecl<'a>> {
+fn constant_decl<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, ConstantDecl<'a>> {
     fn parse_values<'a, 'p, T: Copy, P, E>(
         mut p: P,
     ) -> impl FnMut(Input<'a, &'p str>) -> Pres<'a, 'p, &'a [T], Input<'a, &'p str>, E>
@@ -450,7 +450,7 @@ fn entry_point<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, FunctionDecl<'a>> 
             tkn(".end").ctx("block end"),
         )
         .ctx("program statements"))(i)?;
-        let statements = info.map(|(val, _)| i.extra.alloc_slice(&val)).map(|v| &*v);
+        let statements = info.map(|(val, _)| i.extra.alloc_slice(&val)).map(|v| v);
         Ok((i, Block { statements }))
     }
 
@@ -598,7 +598,7 @@ fn op<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Op<'a>> {
 
 pub type ErrorKind = nom::error::VerboseError<Span>;
 
-fn input_span<'a, T>(value: Input<'a, T>) -> Span {
+fn input_span<T>(value: Input<'_, T>) -> Span {
     value
         .extra
         .span(value.location_offset(), value.location_offset())
@@ -659,8 +659,7 @@ mod tests {
     use std::str::FromStr;
 
     use nom::{
-        bytes::complete::tag,
-        character::complete::{satisfy, space1},
+        character::complete::{satisfy},
         combinator::eof,
         Parser,
     };
@@ -670,10 +669,10 @@ mod tests {
         register::{Register, RegisterKind},
     };
     use pican_core::{
-        ir::{Float, IrNode},
+        ir::{Float},
         properties::OutputProperty,
     };
-    use pican_pir::ir::OutputBinding;
+    
 
     use crate::ast::{OpCode, Stmt, UniformTy};
 

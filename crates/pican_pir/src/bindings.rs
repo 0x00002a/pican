@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use pican_core::{
-    ir::{Ident, IrNode, Span, SwizzleDims},
-    properties::OutputProperty,
+    ir::{Ident, IrNode, SwizzleDims},
     register::Register,
 };
 use serde::Serialize;

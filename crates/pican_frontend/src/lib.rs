@@ -4,8 +4,7 @@ use lower::FrontendToPirCtx;
 use pican_core::{
     alloc::Bump,
     context::{IrContext, PicanContext},
-    diagnostics::{DiagnosticBuilder, FatalErrorEmitted},
-    ir::IrNode,
+    diagnostics::{DiagnosticBuilder},
     span::FileId,
 };
 

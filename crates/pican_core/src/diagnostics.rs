@@ -1,10 +1,10 @@
-use std::{borrow::Cow, cell::RefCell, io::Write};
+use std::{borrow::Cow, cell::RefCell};
 
 use codespan::FileId;
 use codespan_reporting::diagnostic::{Label, LabelStyle, Severity};
 use serde::Serialize;
 
-use crate::ir::{HasSpan, IrNode, Span};
+use crate::ir::{HasSpan, Span};
 
 #[derive(Debug, Serialize)]
 pub struct Diagnostic {
