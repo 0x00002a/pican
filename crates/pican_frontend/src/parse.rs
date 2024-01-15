@@ -367,11 +367,13 @@ fn constant_decl<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, ConstantDecl
     let (i, value) = match discrim {
         ConstantDiscriminants::Integer => {
             let (i, values) = nfo(parse_values(nfo(nmc::u32)))(i)?;
-            (i, values.map(Constant::Integer))
+            let s = values.span();
+            (i, IrNode::new(Constant::Integer(values), s))
         }
         ConstantDiscriminants::Float => {
             let (i, values) = nfo(parse_values(nfo(float)))(i)?;
-            (i, values.map(Constant::Float))
+            let s = values.span();
+            (i, IrNode::new(Constant::Float(values), s))
         }
         ConstantDiscriminants::FloatArray => {
             let p = |i| {
@@ -380,14 +382,15 @@ fn constant_decl<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, ConstantDecl
                     .then_ignore(tkn("]")))
                 .req("expected [hint] for constfa (hint is optional)")
                 .parse(i)?;
-                let (i, values) =
-                    many0_in(nfo(tkn(".constfa").ignore_then(parse_values(nfo(float)))))
-                        .parse(i)?;
+                let (i, values) = nfo(many0_in(nfo(
+                    tkn(".constfa").ignore_then(parse_values(nfo(float)))
+                )))
+                .parse(i)?;
                 let (i, _) = tkn(".end").req("missing constfa end").parse(i)?;
                 Ok((
                     i,
                     Constant::FloatArray {
-                        elements: values.into_bump_slice(),
+                        elements: values.map(|v| v.into_bump_slice()),
                         hint: hint.transpose(),
                     },
                 ))

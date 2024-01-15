@@ -3,7 +3,7 @@ use serde::Serialize;
 
 use pican_core::{
     copy_arrayvec::CopyArrayVec,
-    ir::{Ident, IrNode},
+    ir::{Float, Ident, IrNode},
     ops::{OpCode, OperandKind},
     register::Register,
 };
@@ -36,6 +36,7 @@ pub struct Op<'a> {
 pub enum Operand<'a> {
     Var(IrNode<Ident<'a>>),
     Register(IrNode<Register>),
+    Constant(IrNode<ConstantUniform<'a>>),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
@@ -49,4 +50,11 @@ pub struct Uniform {
     pub ty: IrNode<UniformTy>,
     /// Dimension of the uniform, for non-arrays this is None
     pub dimension: Option<IrNode<usize>>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
+pub enum ConstantUniform<'a> {
+    Integer(IrNode<[IrNode<u32>; 4]>),
+    Float(IrNode<[IrNode<Float>; 4]>),
+    FloatArray(IrNode<&'a [IrNode<[IrNode<Float>; 4]>]>),
 }

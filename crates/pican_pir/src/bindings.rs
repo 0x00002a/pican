@@ -6,7 +6,7 @@ use pican_core::{
 };
 use serde::Serialize;
 
-use crate::ir::Uniform;
+use crate::ir::{ConstantUniform, Uniform};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
 struct Binding<'a> {
@@ -55,6 +55,7 @@ pub enum BindingValue<'a> {
     SwizzleAlias(SwizzleAlias<'a>),
     Register(Register),
     Uniform(Uniform),
+    Constant(ConstantUniform<'a>),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]

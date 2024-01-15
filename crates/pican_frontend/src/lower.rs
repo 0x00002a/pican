@@ -37,13 +37,14 @@ mod lowering {
         context::PicanContext,
         copy_arrayvec::CopyArrayVec,
         diagnostics::{DiagnosticBuilder, FatalErrorEmitted},
-        ir::{Ident, IrNode},
+        ir::{Float, Ident, IrNode},
         register::Register,
         PResult,
     };
 
     use crate::ast::{
-        FunctionDecl, Op, Operand, Operands, Statement, Stmt, UniformDecl, UniformTy,
+        Constant, ConstantDecl, FunctionDecl, Op, Operand, Operands, Statement, Stmt, UniformDecl,
+        UniformTy,
     };
     use pican_pir::bindings as pib;
     use pican_pir::ir as pir;
@@ -82,6 +83,21 @@ mod lowering {
                 bindings: self.bindings,
             }
         }
+        fn unif_len_check<T>(&self, node: IrNode<&[T]>) -> Result<(), FatalErrorEmitted> {
+            if node.get().len() != 4 {
+                self.ctx.diag.fatal(
+                    DiagnosticBuilder::error()
+                        .at(&node)
+                        .primary(format!(
+                            "exactly 4 values are required for a constant, got {}",
+                            node.get().len()
+                        ))
+                        .build(),
+                )
+            } else {
+                Ok(())
+            }
+        }
         pub fn lower_toplevel_stmt(&mut self, stmt: Statement) -> Result<(), FatalErrorEmitted> {
             match stmt {
                 Statement::EntryPoint(ep) => {
@@ -116,7 +132,13 @@ mod lowering {
                     }
                     Ok(())
                 }
-                Statement::Constant(_) => todo!(),
+                Statement::Constant(c) => {
+                    self.check_non_aliased(c.get().name)?;
+                    let value = c.get().value.lower(self)?;
+                    let name = c.get().name.lower(self)?;
+                    self.bindings.define(name, value);
+                    Ok(())
+                }
                 Statement::Comment(_) => Ok(()),
             }
         }
@@ -132,6 +154,54 @@ mod lowering {
             ctx: &PirLower<'a, 'c, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted>;
     }
+    impl<'b> Lower for Constant<'b> {
+        type Pir<'a> = pir::ConstantUniform<'a>;
+
+        fn lower<'a, 'c, S: AsRef<str>>(
+            self,
+            ctx: &PirLower<'a, 'c, S>,
+        ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            match self {
+                Constant::Integer(i) => {
+                    ctx.unif_len_check(i)?;
+                    Ok(pir::ConstantUniform::Integer(
+                        i.map(|f| std::array::from_fn::<_, 4, _>(|i| f[i])),
+                    ))
+                }
+                Constant::Float(f) => {
+                    ctx.unif_len_check(f)?;
+                    Ok(pir::ConstantUniform::Float(
+                        f.map(|f| std::array::from_fn::<_, 4, _>(|i| f[i])),
+                    ))
+                }
+                Constant::FloatArray { elements, hint } => {
+                    if let Some(h) = hint {
+                        if *h.get() as usize != elements.get().len() {
+                            return ctx.ctx.diag.fatal(
+                                DiagnosticBuilder::error()
+                                    .at(&elements)
+                                    .primary("hint size does not match actual size")
+                                    .note(&h, "hint defined here")
+                                    .build(),
+                            );
+                        }
+                    }
+                    let els = elements
+                        .map(|elements| {
+                            let mut els = BumpVec::with_capacity_in(elements.len(), ctx.alloc);
+                            for el in elements.iter() {
+                                ctx.unif_len_check(*el)?;
+                                els.push(el.map(|el| std::array::from_fn(|i| el[i])));
+                            }
+                            Ok(els.into_bump_slice())
+                        })
+                        .transpose()?;
+                    Ok(pir::ConstantUniform::FloatArray(els))
+                }
+            }
+        }
+    }
+
     impl Lower for UniformTy {
         type Pir<'a> = pican_pir::ty::UniformTy;
 

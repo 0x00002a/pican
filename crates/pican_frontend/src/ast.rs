@@ -33,10 +33,10 @@ pub enum Statement {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug, EnumDiscriminants)]
 pub enum Constant<'a> {
-    Integer(&'a [IrNode<u32>]),
-    Float(&'a [IrNode<Float>]),
+    Integer(IrNode<&'a [IrNode<u32>]>),
+    Float(IrNode<&'a [IrNode<Float>]>),
     FloatArray {
-        elements: &'a [IrNode<&'a [IrNode<Float>]>],
+        elements: IrNode<&'a [IrNode<&'a [IrNode<Float>]>]>,
         hint: Option<IrNode<u8>>,
     },
 }
