@@ -30,9 +30,12 @@ pub enum Statement {
     RegisterBind(RegisterBind),
     Uniform(UniformDecl),
     Constant(ConstantDecl),
-    OutputBind(OutputBind)
+    OutputBind(OutputBind),
+    InputBind(InputBind)
 }
 }
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+pub struct InputBind<'a>(pub IrNode<Ident<'a>>);
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct OutputBind<'a> {

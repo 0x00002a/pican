@@ -19,6 +19,12 @@ pub struct Module<'a> {
     pub entry_points: &'a [IrNode<EntryPoint<'a>>],
     pub bindings: Bindings<'a>,
     pub outputs: &'a [IrNode<&'a OutputBinding<'a>>],
+    pub inputs: &'a [IrNode<&'a InputBinding<'a>>],
+}
+#[derive(Debug, Serialize, PartialEq, Eq, Clone, Hash)]
+pub struct InputBinding<'a> {
+    pub name: IrNode<Ident<'a>>,
+    pub index: usize,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq, Clone, Hash)]

@@ -1,8 +1,8 @@
 use super::ast::Stmt;
 use crate::ast::{
-    self, Block, Constant, ConstantDecl, ConstantDiscriminants, FunctionDecl, Ident, Op, OpCode,
-    Operand, Operands, OutputBind, RegisterBind, Statement, SwizzleExpr, Uniform, UniformDecl,
-    UniformTy,
+    self, Block, Constant, ConstantDecl, ConstantDiscriminants, FunctionDecl, Ident, InputBind, Op,
+    OpCode, Operand, Operands, OutputBind, RegisterBind, Statement, SwizzleExpr, Uniform,
+    UniformDecl, UniformTy,
 };
 use crate::parse_ext::ParserExt;
 use nom::bytes::complete::take_until;
@@ -236,6 +236,7 @@ where
 
 pub fn stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
     branch::alt((
+        nfo(input_bind).map(Into::into),
         nfo(output_bind).map(Into::into),
         nfo(constant_decl).map(Into::into),
         nfo(register_bind).map(Into::into),
@@ -493,6 +494,14 @@ fn output_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OutputBind<'a>> {
             register,
         },
     ))
+}
+fn input_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, InputBind<'a>> {
+    let (i, _) = tag(".in")(i)?;
+    let (i, _) = space(i)?;
+    let (i, name) = nfo(ident)
+        .req("expected identifier for input binding")
+        .parse(i)?;
+    Ok((i, InputBind(name)))
 }
 
 fn opcode<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, OpCode> {

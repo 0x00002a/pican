@@ -56,6 +56,7 @@ mod lowering {
         bindings: pib::Bindings<'a>,
         entry_points: BumpVec<'a, IrNode<pir::EntryPoint<'a>>>,
         outputs: BumpVec<'a, IrNode<&'a pir::OutputBinding<'a>>>,
+        inputs: BumpVec<'a, IrNode<&'a pir::InputBinding<'a>>>,
     }
     impl<'a, 'c, S: AsRef<str>> PirLower<'a, 'c, S> {
         pub fn new(alloc: &'a Bump, ctx: &'c PicanContext<S>) -> Self {
@@ -65,6 +66,7 @@ mod lowering {
                 bindings: Default::default(),
                 entry_points: BumpVec::new_in(alloc),
                 outputs: BumpVec::new_in(alloc),
+                inputs: BumpVec::new_in(alloc),
             }
         }
 
@@ -85,6 +87,7 @@ mod lowering {
                 entry_points: self.entry_points.into_bump_slice(),
                 bindings: self.bindings,
                 outputs: self.outputs.into_bump_slice(),
+                inputs: self.inputs.into_bump_slice(),
             }
         }
         fn unif_len_check<T>(&self, node: IrNode<&[T]>) -> Result<(), FatalErrorEmitted> {
@@ -154,6 +157,21 @@ mod lowering {
                         self.bindings.define(ident, o);
                     }
                     self.outputs.push(o);
+                    Ok(())
+                }
+                Statement::InputBind(i) => {
+                    let b = i
+                        .map(|i| {
+                            self.check_non_aliased(i.0)?;
+                            Ok(self.alloc.alloc(pir::InputBinding {
+                                name: i.0.lower(self)?,
+                                index: self.inputs.len(),
+                            }))
+                        })
+                        .transpose()?
+                        .map(|b| -> &_ { b });
+                    self.inputs.push(b);
+                    self.bindings.define(b.get().name, b);
                     Ok(())
                 }
             }

@@ -7,7 +7,7 @@ use pican_core::{
 };
 use serde::Serialize;
 
-use crate::ir::{ConstantUniform, OutputBinding, Uniform};
+use crate::ir::{ConstantUniform, InputBinding, OutputBinding, Uniform};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
 struct Binding<'a> {
@@ -58,6 +58,7 @@ pub enum BindingValue<'a> {
     Uniform(Uniform),
     Constant(ConstantUniform<'a>),
     OutputProperty(&'a OutputBinding<'a>),
+    Input(&'a InputBinding<'a>),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
