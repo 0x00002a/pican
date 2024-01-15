@@ -157,6 +157,16 @@ impl<T, E> IrNode<std::result::Result<T, E>> {
         }
     }
 }
+
+impl<T> IrNode<std::option::Option<T>> {
+    pub fn transpose(self) -> std::option::Option<IrNode<T>> {
+        let span = self.span;
+        match self.node {
+            Some(node) => Some(IrNode { node, span }),
+            None => None,
+        }
+    }
+}
 impl<T> IrNode<IrNode<T>> {
     /// Collapse nested `IrNode`
     ///

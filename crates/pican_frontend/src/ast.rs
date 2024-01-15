@@ -7,6 +7,7 @@ use pican_core::ir::{Float, IrNode};
 
 pub use pican_core::ir::Ident;
 pub use pican_core::ops::OpCode;
+use strum::EnumDiscriminants;
 
 macro_rules! sum_node {
     ($vi:vis enum $name:ident {
@@ -30,10 +31,20 @@ pub enum Statement {
 }
 }
 
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug, EnumDiscriminants)]
+pub enum Constant<'a> {
+    Integer(&'a [IrNode<u32>]),
+    Float(&'a [IrNode<Float>]),
+    FloatArray {
+        elements: &'a [IrNode<&'a [IrNode<Float>]>],
+        hint: Option<IrNode<u8>>,
+    },
+}
+
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct ConstantDecl<'a> {
     pub name: IrNode<Ident<'a>>,
-    pub values: IrNode<&'a [IrNode<Float>]>,
+    pub value: IrNode<Constant<'a>>,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]

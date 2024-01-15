@@ -263,6 +263,7 @@ dependencies = [
  "pican_core",
  "pican_pir",
  "serde",
+ "strum",
  "typesum",
 ]
 

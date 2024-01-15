@@ -1,13 +1,13 @@
 use super::ast::Stmt;
 use crate::ast::{
-    self, Block, FunctionDecl, Ident, Op, OpCode, Operand, Operands, RegisterBind, Statement,
-    Uniform, UniformDecl, UniformTy,
+    self, Block, Constant, ConstantDecl, ConstantDiscriminants, FunctionDecl, Ident, Op, OpCode,
+    Operand, Operands, RegisterBind, Statement, Uniform, UniformDecl, UniformTy,
 };
 use crate::parse_ext::ParserExt;
 use nom::bytes::complete::take_until;
 use nom::character::complete::{self as nmc, line_ending, not_line_ending, space1};
 use nom::error::context;
-use nom::multi::{fold_many0, many0, many0_count, many1, many_till};
+use nom::multi::{fold_many0, many0, many0_count, many1, many_till, separated_list1};
 use nom::sequence::{pair, preceded, separated_pair, terminated, tuple};
 use nom::{
     branch::{self},
@@ -39,7 +39,8 @@ impl<'a> InputContext<'a> {
     pub fn alloc<A: Copy>(&self, val: A) -> &'a mut A {
         self.area.alloc(val)
     }
-    pub fn alloc_slice<A: Copy>(&self, val: &[A]) -> &'a mut [A] {
+
+    pub fn alloc_slice<A: Copy>(&self, val: &[A]) -> &'a [A] {
         self.area.alloc_slice_copy(val)
     }
 
@@ -233,6 +234,7 @@ where
 
 pub fn stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
     branch::alt((
+        nfo(constant_decl).map(Into::into),
         nfo(register_bind).map(Into::into),
         nfo(uniform_decl).map(Into::into),
         nfo(comment)
@@ -300,9 +302,23 @@ pub fn ident<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Ident<'a>> {
     not_kw.ignore_then(ident_word).map(Ident::new).parse(i)
 }
 fn f32<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, f32> {
+    let frac_part = nom::multi::fold_many1(
+        nmc::satisfy(|ch| ch.is_ascii_digit()),
+        || (0.0, 10.0),
+        |(l, n), c| (l + c.to_digit(10).unwrap() as f32 / n, n + 10.0),
+    )
+    .map(|(l, _)| l);
     let (i, (ipart, _, floating)) =
-        tuple((nmc::i32, tag("."), nmc::u64.req("missing floating part"))).parse(i)?;
-    Ok((i, (ipart as f32) + 1. / (floating as f32)))
+        tuple((nmc::i32, tag("."), frac_part.req("missing floating part"))).parse(i)?;
+    Ok((
+        i,
+        (ipart as f32)
+            + if ipart.is_negative() {
+                -floating
+            } else {
+                floating
+            },
+    ))
 }
 fn float<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Float> {
     let (i, val) = branch::alt((f32, ncm::map(nmc::i64, |n| n as f32)))
@@ -311,8 +327,82 @@ fn float<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Float> {
     if let Some(f) = Float::new(val) {
         Ok((i, f))
     } else {
-        ncm::fail(i)
+        ncm::fail.ctx("invalid float, was NaN or inf").parse(i)
     }
+}
+
+fn constant_decl<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, ConstantDecl<'a>> {
+    fn parse_values<'a, 'p, T: Copy, P, E>(
+        mut p: P,
+    ) -> impl FnMut(Input<'a, &'p str>) -> Pres<'a, 'p, &'a [T], Input<'a, &'p str>, E>
+    where
+        P: Parser<Input<'a, &'p str>, T, E>,
+        E: nom::error::ParseError<nom_locate::LocatedSpan<&'p str, InputContext<'a>>>
+            + nom::error::ContextError<nom_locate::LocatedSpan<&'p str, InputContext<'a>>>,
+    {
+        move |i| {
+            tkn("(")
+                .ignore_then(
+                    nom::multi::separated_list1(tkn(","), |i| p.parse(i))
+                        .req("expected values for constant"),
+                )
+                .then_ignore(tkn(")").req("missing closing )"))
+                .req("missing values for integer constant")
+                .map(|ps| i.extra.alloc_slice(&ps))
+                .parse(i)
+        }
+    }
+    let (i, _) = tag(".const")(i)?;
+    let (i, discrim) = penum(&[
+        ("fa", ConstantDiscriminants::FloatArray),
+        ("f", ConstantDiscriminants::Float),
+        ("i", ConstantDiscriminants::Integer),
+    ])
+    .req("unknown postfix for constant")
+    .parse(i)?;
+    let (i, _) = ncm::opt(space)(i)?;
+    let (i, name) = nfo(ident)
+        .req("expected identifier for constant")
+        .parse(i)?;
+    let (i, value) = match discrim {
+        ConstantDiscriminants::Integer => {
+            let (i, values) = nfo(parse_values(nfo(nmc::u32)))(i)?;
+            (i, values.map(Constant::Integer))
+        }
+        ConstantDiscriminants::Float => {
+            let (i, values) = nfo(parse_values(nfo(float)))(i)?;
+            (i, values.map(Constant::Float))
+        }
+        ConstantDiscriminants::FloatArray => {
+            let p = |i| {
+                let (i, hint) = nfo(tkn("[")
+                    .ignore_then(ncm::opt(nmc::u8))
+                    .then_ignore(tkn("]")))
+                .req("expected [hint] for constfa (hint is optional)")
+                .parse(i)?;
+                let (i, values) =
+                    many0_in(nfo(tkn(".constfa").ignore_then(parse_values(nfo(float)))))
+                        .parse(i)?;
+                let (i, _) = tkn(".end").req("missing constfa end").parse(i)?;
+                Ok((
+                    i,
+                    Constant::FloatArray {
+                        elements: values.into_bump_slice(),
+                        hint: hint.transpose(),
+                    },
+                ))
+            };
+            nfo(p).parse(i)?
+        }
+    };
+    Ok((i, ConstantDecl { name, value }))
+}
+
+fn dims<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, u8> {
+    tag("[")
+        .ignore_then(nmc::u8.req("missing size in uniform dims"))
+        .then_ignore(tkn("]").req("missing closing ] for uniform dimensions"))
+        .parse(i)
 }
 
 fn uniform_ty<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, UniformTy> {
@@ -324,12 +414,6 @@ fn uniform_ty<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, UniformTy> {
     .parse(i)
 }
 fn uniform<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Uniform<'a>> {
-    fn dims<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, u8> {
-        tag("[")
-            .ignore_then(nmc::u8.req("missing size in uniform dims"))
-            .then_ignore(tkn("]").req("missing closing ] for uniform dimensions"))
-            .parse(i)
-    }
     let (i, name) = nfo(ident)(i)?;
     let (i, dimensions) = ncm::opt(nfo(dims))(i)?;
     Ok((i, Uniform { name, dimensions }))
@@ -458,7 +542,7 @@ mod tests {
         combinator::eof,
         Parser,
     };
-    use pican_core::ir::IrNode;
+    use pican_core::ir::{Float, IrNode};
     use pican_core::span::Files;
     use pican_core::{
         alloc::Bump,
@@ -603,5 +687,32 @@ mod tests {
         let r = ctx.run_parser(".alias m r0", super::register_bind).unwrap();
         assert_eq!(r.name.get(), "m");
         assert_eq!(r.reg.get(), &Register::from_str("r0").unwrap());
+    }
+
+    #[test]
+    fn parse_f32_basic() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser("4.2", super::f32).unwrap();
+        assert_eq!(r, 4.2);
+    }
+
+    #[test]
+    fn parse_f32_negative() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser("-4.2", super::f32).unwrap();
+        assert_eq!(r, -4.2);
+    }
+    #[test]
+    fn parse_f32_zero() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser("0.0", super::f32).unwrap();
+        assert_eq!(r, 0.);
+    }
+
+    #[test]
+    fn parse_float_zero() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser("0.0", super::float).unwrap();
+        assert_eq!(r, Float::new(0.0).unwrap());
     }
 }
