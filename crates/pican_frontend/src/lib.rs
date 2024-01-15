@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use lower::FrontendToPirCtx;
 use pican_core::{
     alloc::Bump,
@@ -22,14 +24,16 @@ pub fn parse_and_lower<'a, S: AsRef<str>>(
     let ast = match parse::parse(&arena, ctx.files.source(file).as_ref(), file) {
         Ok(ast) => ast,
         Err(e) => {
+            let mut diag = DiagnosticBuilder::error();
             for (span, kind) in e.errors {
-                ctx.diag.add(
-                    DiagnosticBuilder::error()
-                        .at(&IrNode::new((), span))
-                        .primary(format!("parse error {kind:?}"))
-                        .build(),
-                );
+                let msg = match kind {
+                    nom::error::VerboseErrorKind::Context(c) => Cow::Borrowed(c),
+                    nom::error::VerboseErrorKind::Char(c) => Cow::Owned(format!("expected {c}")),
+                    nom::error::VerboseErrorKind::Nom(n) => Cow::Owned(format!("in {n:#?}")),
+                };
+                diag = diag.note(&span, msg);
             }
+            ctx.diag.add(diag.build());
             return None;
         }
     };
