@@ -624,7 +624,12 @@ pub fn parse<'a>(arena: &'a Bump, input: &str, file: FileId) -> Result<&'a [Stmt
         arena,
         input,
         file,
-        many0_in(nfo(stmt)).map(|stmts| stmts.into_bump_slice()),
+        many0_in(
+            nmc::multispace0
+                .ignore_then(nfo(stmt))
+                .then_ignore(nmc::multispace0),
+        )
+        .map(|stmts| stmts.into_bump_slice()),
     )
 }
 #[cfg(test)]
