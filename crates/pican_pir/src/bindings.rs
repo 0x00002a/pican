@@ -2,11 +2,12 @@ use std::collections::HashMap;
 
 use pican_core::{
     ir::{Ident, IrNode, Span, SwizzleDims},
+    properties::OutputProperty,
     register::Register,
 };
 use serde::Serialize;
 
-use crate::ir::{ConstantUniform, Uniform};
+use crate::ir::{ConstantUniform, OutputBinding, Uniform};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
 struct Binding<'a> {
@@ -56,6 +57,7 @@ pub enum BindingValue<'a> {
     Register(Register),
     Uniform(Uniform),
     Constant(ConstantUniform<'a>),
+    OutputProperty(&'a OutputBinding<'a>),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]

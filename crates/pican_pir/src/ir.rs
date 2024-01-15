@@ -5,6 +5,7 @@ use pican_core::{
     copy_arrayvec::CopyArrayVec,
     ir::{Float, Ident, IrNode, SwizzleDims},
     ops::OpCode,
+    properties::OutputProperty,
     register::Register,
 };
 
@@ -17,6 +18,14 @@ use super::bindings::Bindings;
 pub struct Module<'a> {
     pub entry_points: &'a [IrNode<EntryPoint<'a>>],
     pub bindings: Bindings<'a>,
+    pub outputs: &'a [IrNode<&'a OutputBinding<'a>>],
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq, Clone, Hash)]
+pub struct OutputBinding<'a> {
+    pub register: Option<IrNode<Register>>,
+    pub alias: Option<IrNode<Ident<'a>>>,
+    pub property: OutputProperty,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy, Hash)]

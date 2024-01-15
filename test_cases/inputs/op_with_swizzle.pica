@@ -1,0 +1,4 @@
+.proc main
+    dp4 r0, r1.xxy, v0
+
+.end

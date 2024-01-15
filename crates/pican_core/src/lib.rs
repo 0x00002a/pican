@@ -6,6 +6,7 @@ pub mod copy_arrayvec;
 pub mod diagnostics;
 pub mod ir;
 pub mod ops;
+pub mod properties;
 pub mod register;
 pub mod span;
 

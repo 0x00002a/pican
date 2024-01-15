@@ -54,6 +54,7 @@ mod lowering {
         ctx: &'c PicanContext<S>,
         bindings: pib::Bindings<'a>,
         entry_points: BumpVec<'a, IrNode<pir::EntryPoint<'a>>>,
+        outputs: BumpVec<'a, IrNode<&'a pir::OutputBinding<'a>>>,
     }
     impl<'a, 'c, S: AsRef<str>> PirLower<'a, 'c, S> {
         pub fn new(alloc: &'a Bump, ctx: &'c PicanContext<S>) -> Self {
@@ -62,6 +63,7 @@ mod lowering {
                 ctx,
                 bindings: Default::default(),
                 entry_points: BumpVec::new_in(alloc),
+                outputs: BumpVec::new_in(alloc),
             }
         }
 
@@ -81,6 +83,7 @@ mod lowering {
             pir::Module {
                 entry_points: self.entry_points.into_bump_slice(),
                 bindings: self.bindings,
+                outputs: self.outputs.into_bump_slice(),
             }
         }
         fn unif_len_check<T>(&self, node: IrNode<&[T]>) -> Result<(), FatalErrorEmitted> {
