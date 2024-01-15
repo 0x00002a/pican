@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*", "exes/*"]
+members = ["crates/*", "exes/*", "test_cases"]
 
 [patch.crates-io]
 pican_core = { path = "./crates/pican_core" }
