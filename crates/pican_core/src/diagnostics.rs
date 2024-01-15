@@ -4,7 +4,7 @@ use codespan::FileId;
 use codespan_reporting::diagnostic::{Label, LabelStyle, Severity};
 use serde::Serialize;
 
-use crate::ir::{IrNode, Span};
+use crate::ir::{HasSpan, IrNode, Span};
 
 #[derive(Debug, Serialize)]
 pub struct Diagnostic {
@@ -51,7 +51,7 @@ impl DiagnosticBuilder {
         }
     }
 
-    pub fn note<T>(mut self, node: &IrNode<T>, msg: impl Into<Cow<'static, str>>) -> Self {
+    pub fn note(mut self, node: &impl HasSpan, msg: impl Into<Cow<'static, str>>) -> Self {
         self.messages.push(DiagnosticMessage {
             style: LabelStyle::Secondary,
             txt: msg.into(),
@@ -60,7 +60,7 @@ impl DiagnosticBuilder {
         });
         self
     }
-    pub fn at<T>(mut self, node: &IrNode<T>) -> Self {
+    pub fn at(mut self, node: &impl HasSpan) -> Self {
         self.primary_loc.replace(node.span());
         self
     }

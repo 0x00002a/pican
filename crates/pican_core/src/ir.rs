@@ -93,10 +93,6 @@ impl<T> IrNode<T> {
         Self { node, span }
     }
 
-    pub fn span(&self) -> Span {
-        self.span
-    }
-
     pub fn map<To>(self, f: impl FnOnce(T) -> To) -> IrNode<To> {
         IrNode {
             node: f(self.node),
@@ -190,3 +186,17 @@ pub enum SwizzleDim {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct SwizzleDims<'a>(pub IrNode<&'a [SwizzleDim]>);
+
+pub trait HasSpan {
+    fn span(&self) -> Span;
+}
+impl HasSpan for Span {
+    fn span(&self) -> Span {
+        *self
+    }
+}
+impl<T> HasSpan for IrNode<T> {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
