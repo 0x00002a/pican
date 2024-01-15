@@ -68,9 +68,7 @@ pub struct Op<'a> {
 pub type Stmt<'a> = IrNode<Statement<'a>>;
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
-pub struct Comment<'a> {
-    pub content: IrNode<&'a str>,
-}
+pub struct Comment<'a>(pub &'a str);
 
 /// A section
 ///

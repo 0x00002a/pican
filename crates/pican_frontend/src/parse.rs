@@ -1,5 +1,5 @@
 use super::ast::Stmt;
-use crate::ast::{Block, FunctionDecl, Ident, Op, OpCode, Operand, Operands, Statement};
+use crate::ast::{self, Block, FunctionDecl, Ident, Op, OpCode, Operand, Operands, Statement};
 use crate::parse_ext::ParserExt;
 use nom::bytes::complete::take_until;
 use nom::character::complete::{self as nmc, line_ending, not_line_ending, space1};
@@ -13,7 +13,7 @@ use nom::{
     sequence::delimited,
     IResult,
 };
-use nom::{combinator as ncm, FindSubstring, InputIter};
+use nom::{combinator as ncm, FindSubstring, InputIter, Offset, Slice};
 use nom::{
     error::{VerboseError, VerboseErrorKind},
     Parser,
@@ -38,6 +38,10 @@ impl<'a> InputContext<'a> {
     }
     pub fn alloc_slice<A: Copy>(&self, val: &[A]) -> &'a mut [A] {
         self.area.alloc_slice_copy(val)
+    }
+
+    pub fn alloc_str(&self, val: &str) -> &'a str {
+        self.area.alloc_str(val)
     }
     pub fn span(&self, start: usize, end: usize) -> Span {
         Span::new(
@@ -74,7 +78,9 @@ where
         + FindSubstring<&'a str>
         + Compare<&'a str>
         + nom::Slice<std::ops::RangeFrom<usize>>
-        + InputIter,
+        + InputIter
+        + Offset
+        + nom::Slice<std::ops::RangeTo<usize>>,
     <I as InputTakeAtPosition>::Item: AsChar + Clone,
     <I as nom::InputIter>::Item: nom::AsChar,
 {
@@ -91,15 +97,17 @@ where
         + FindSubstring<&'a str>
         + Compare<&'a str>
         + InputIter
-        + nom::Slice<std::ops::RangeFrom<usize>>,
+        + nom::Slice<std::ops::RangeFrom<usize>>
+        + nom::Offset
+        + nom::Slice<std::ops::RangeTo<usize>>,
     <I as InputTakeAtPosition>::Item: AsChar + Clone,
     <I as nom::InputIter>::Item: nom::AsChar,
 {
-    many0_count(nmc::multispace1.map(|_| ()).or(comment))
+    many0_count(nmc::multispace1.map(|_| ()).or(comment.map(|_| ())))
         .map(|_| ())
         .parse(i)
 }
-fn comment<'a, I, E>(i: I) -> IResult<I, (), E>
+fn comment<'a, I, E>(i: I) -> IResult<I, I, E>
 where
     E: ParseError<I>,
     I: InputTakeAtPosition
@@ -109,17 +117,21 @@ where
         + InputLength
         + InputIter
         + Compare<&'a str>
-        + nom::Slice<std::ops::RangeFrom<usize>>,
+        + Offset
+        + nom::Slice<std::ops::RangeFrom<usize>>
+        + nom::Slice<std::ops::RangeTo<usize>>,
     <I as InputTakeAtPosition>::Item: AsChar + Clone,
     <I as nom::InputIter>::Item: nom::AsChar,
 {
-    let (i, _) = tag(";")
-        .ignore_then(many0_count(
+    let (i, c) = tag(";")
+        .ignore_then(ncm::recognize(many0_count(
             ncm::not(tag("\n").or(ncm::eof)).ignore_then(nmc::anychar),
-        ))
+        )))
+        .then_ignore(ncm::opt(tag("\n")))
         .parse(i)?;
-    Ok((i, ()))
+    Ok((i, c))
 }
+
 fn tkn<'a, I: 'a, T: 'a, E: ParseError<I> + 'a>(ch: T) -> impl FnMut(I) -> IResult<I, I, E> + 'a
 where
     I: InputTakeAtPosition
@@ -130,6 +142,8 @@ where
         + FindSubstring<&'a str>
         + InputIter
         + nom::Slice<std::ops::RangeFrom<usize>>
+        + Offset
+        + nom::Slice<std::ops::RangeTo<usize>>
         + Compare<&'a str>,
     T: InputLength + Clone,
     <I as InputTakeAtPosition>::Item: AsChar + Clone,
@@ -215,7 +229,17 @@ where
 }
 
 pub fn stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
-    branch::alt((nfo(op).map(Into::into), nfo(entry_point).map(Into::into))).parse(i)
+    branch::alt((
+        nfo(comment)
+            .map(|c| {
+                c.map(|s: Input<'a, &'p str>| i.extra.alloc_str(s.fragment()))
+                    .map(ast::Comment)
+            })
+            .map(Statement::Comment),
+        nfo(op).map(Into::into),
+        nfo(entry_point).map(Into::into),
+    ))
+    .parse(i)
 }
 
 fn array_index<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Nfo<u8>> {
@@ -479,7 +503,14 @@ mod tests {
     #[test]
     fn parse_comment() {
         let ctx = TestCtx::new();
-        ctx.run_parser("; sup", super::comment).unwrap();
+        let r = ctx.run_parser("; sup", super::comment).unwrap();
+        assert_eq!(r.fragment(), &" sup");
+    }
+    #[test]
+    fn parse_comment_newline() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser("; sup\n", super::comment).unwrap();
+        assert_eq!(r.fragment(), &" sup");
     }
 
     #[test]
