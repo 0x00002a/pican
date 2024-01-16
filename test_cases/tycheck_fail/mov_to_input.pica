@@ -1,0 +1,5 @@
+.in input
+.proc main
+    mov input, r1, r2
+
+.end

@@ -62,12 +62,12 @@ const DST_SRC: OperandSlots = OperandSlots::new(&[
     },
 ]);
 
+const NO_OPERANDS: OperandSlots = OperandSlots::new(&[]);
+
 /// Get the shape of the operand slots for an opcode
 pub fn slots_for_opcode(op: OpCode) -> OperandSlots {
     match op {
-        OpCode::Nop => todo!(),
-        OpCode::End => todo!(),
-        OpCode::Emit => todo!(),
+        OpCode::Break | OpCode::Nop | OpCode::End | OpCode::Emit => NO_OPERANDS,
         OpCode::SetEmit => todo!(),
         OpCode::Add
         | OpCode::Dp3
@@ -90,7 +90,6 @@ pub fn slots_for_opcode(op: OpCode) -> OperandSlots {
         OpCode::Cmp => todo!(),
         OpCode::Call => todo!(),
         OpCode::For => todo!(),
-        OpCode::Break => todo!(),
         OpCode::BreakC => todo!(),
         OpCode::CallC => todo!(),
         OpCode::IfC => todo!(),
@@ -98,6 +97,19 @@ pub fn slots_for_opcode(op: OpCode) -> OperandSlots {
         OpCode::CallU => todo!(),
         OpCode::IfU => todo!(),
         OpCode::JmpU => todo!(),
-        OpCode::Mad => todo!(),
+        OpCode::Mad => OperandSlots::new(&[
+            OperandSlot {
+                allowed_types: &[OperandTy::DstReg],
+            },
+            OperandSlot {
+                allowed_types: &[OperandTy::SrcReg],
+            },
+            OperandSlot {
+                allowed_types: &[OperandTy::SrcReg, OperandTy::WideSrc],
+            },
+            OperandSlot {
+                allowed_types: &[OperandTy::SrcReg, OperandTy::WideSrc],
+            },
+        ]),
     }
 }

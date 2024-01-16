@@ -237,6 +237,7 @@ dependencies = [
  "pican_core",
  "pican_frontend",
  "pican_pir",
+ "pican_ty",
  "serde_json",
 ]
 

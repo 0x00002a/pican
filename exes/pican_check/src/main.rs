@@ -8,6 +8,7 @@ use pican_core::{
     span::FileId,
 };
 use pican_frontend::parse_and_lower;
+use pican_ty::PicanTyCheck;
 
 mod args;
 
@@ -33,9 +34,15 @@ fn main() {
 
     let pir_ctx = IrContext::new();
     let pir = parse_and_lower(input_id, &ctx, &pir_ctx);
+    let Some(pir) = pir else {
+        print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);
+        return;
+    };
+    let tycheck = ctx.types_for_module(&pir);
+    let ok = tycheck.check().is_ok();
     print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);
 
-    if let Some(pir) = pir {
+    if ok {
         let json = serde_json::to_string_pretty(&pir).unwrap();
         println!("{json}");
     }

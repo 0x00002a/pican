@@ -1,6 +1,12 @@
-use pican_core::{ir::Ident, register::RegisterKind};
+use pican_core::{
+    diagnostics::FatalErrorEmitted,
+    ir::{Ident, IrNode},
+    register::RegisterKind,
+};
 use pican_pir::{bindings::Bindings, ir::Operand};
 use typesum::sumtype;
+
+use crate::context::TyContext;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[sumtype]
@@ -42,39 +48,36 @@ pub(crate) trait Typed {
     fn ty(&self) -> Type;
 }
 
-impl<'a> ContextuallyTyped<'a> for pican_pir::bindings::BindingValue<'a> {
-    fn ty_with_ctx<'b>(&self, ctx: &TyContext<'a, 'b>) -> Type {
+impl<'a> ContextuallyTyped<'a> for IrNode<pican_pir::bindings::BindingValue<'a>> {
+    fn ty_with_ctx<'b>(
+        &self,
+        ctx: &TyContext<'a, 'b>,
+    ) -> Result<Type, pican_core::diagnostics::FatalErrorEmitted> {
         use pican_pir::bindings::BindingValue;
-        match self {
-            BindingValue::Register(r) => r.kind.ty(),
-            BindingValue::Uniform(u) => u.ty(),
-            BindingValue::Constant(v) => v.ty(),
+        match self.get() {
+            BindingValue::Register(r) => ctx.type_of(&r.kind),
+            BindingValue::Uniform(u) => ctx.type_of(u),
+            BindingValue::Constant(v) => ctx.type_of(v),
             BindingValue::OutputProperty(_) | BindingValue::Input(_) => {
-                RegisterTy::new(PrimTy::Float).into()
+                Ok(RegisterTy::new(PrimTy::Float).into())
             }
-            BindingValue::SwizzleVar(s) => s.target.get().ty_with_ctx(ctx),
-            BindingValue::SwizzleRegister(s) => s.target.get().kind.ty(),
-            BindingValue::Alias(i) => i.ty_with_ctx(ctx),
+            BindingValue::SwizzleVar(s) => ctx.type_of(&s.target),
+            BindingValue::SwizzleRegister(s) => ctx.type_of(&s.target.get().kind),
+            BindingValue::Alias(i) => ctx.type_of(&self.map(|_| *i)),
         }
     }
 }
-impl<'a> ContextuallyTyped<'a> for Ident<'a> {
-    fn ty_with_ctx<'b>(&self, ctx: &TyContext<'a, 'b>) -> Type {
-        ctx.bindings
-            .lookup(self)
-            .unwrap_or_else(|| {
-                panic!("couldn't find binding for {self:#?}, this should have been caught earlier");
-            })
-            .get()
-            .ty_with_ctx(ctx)
+impl<'a> ContextuallyTyped<'a> for IrNode<Ident<'a>> {
+    fn ty_with_ctx<'b>(&self, ctx: &TyContext<'a, 'b>) -> Result<Type, FatalErrorEmitted> {
+        ctx.lookup(*self)?.ty_with_ctx(ctx)
     }
 }
 
 impl<'a> ContextuallyTyped<'a> for Operand<'a> {
-    fn ty_with_ctx<'b>(&self, ctx: &TyContext<'a, 'b>) -> Type {
+    fn ty_with_ctx<'b>(&self, ctx: &TyContext<'a, 'b>) -> Result<Type, FatalErrorEmitted> {
         match self.kind.get() {
-            pican_pir::ir::OperandKind::Var(v) => v.get().ty_with_ctx(ctx),
-            pican_pir::ir::OperandKind::Register(r) => r.get().kind.ty(),
+            pican_pir::ir::OperandKind::Var(v) => ctx.type_of(v),
+            pican_pir::ir::OperandKind::Register(r) => ctx.type_of(&r.get().kind),
         }
     }
 }
@@ -141,15 +144,14 @@ impl<'a> Typed for pican_pir::ir::ConstantUniform<'a> {
 }
 
 pub trait ContextuallyTyped<'a> {
-    fn ty_with_ctx<'b>(&self, ctx: &TyContext<'a, 'b>) -> Type;
+    fn ty_with_ctx<'b>(&self, ctx: &TyContext<'a, 'b>) -> Result<Type, FatalErrorEmitted>;
 }
 
-pub struct TyContext<'a, 'b> {
-    bindings: &'b Bindings<'a>,
-}
-
-impl<'a, 'b> TyContext<'a, 'b> {
-    pub fn type_of(&self, expr: &impl ContextuallyTyped<'a>) -> Type {
-        expr.ty_with_ctx(self)
+impl<'a, T> ContextuallyTyped<'a> for T
+where
+    T: Typed,
+{
+    fn ty_with_ctx<'b>(&self, _ctx: &TyContext<'a, 'b>) -> Result<Type, FatalErrorEmitted> {
+        Ok(self.ty())
     }
 }

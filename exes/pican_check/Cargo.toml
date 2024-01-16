@@ -9,6 +9,7 @@ edition = "2021"
 pican_frontend = { path = "../../crates/pican_frontend", version = "0.1.0" }
 pican_pir = { path = "../../crates/pican_pir", version = "0.1.0" }
 pican_core = { path = "../../crates/pican_core", version = "0.1.0" }
+pican_ty = { path = "../../crates/pican_ty", version = "0.1.0" }
 clap = { version = "4.4.14", features = ["derive"] }
 codespan-reporting = "0.11.1"
 serde_json = "1.0.111"
