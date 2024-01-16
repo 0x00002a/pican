@@ -1,9 +1,12 @@
 use pican_core::ops::OpCode;
 
+use crate::ty::Type;
+
 pub enum OperandWidth {
     Wide,
     Narrow,
 }
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum OperandTy {
     /// Destination register
     DstReg,
@@ -11,6 +14,16 @@ pub enum OperandTy {
     SrcReg,
     /// Wide input, also allows uniforms with relative addressing
     WideSrc,
+}
+
+impl OperandTy {
+    pub fn matches(self, ty: Type) -> bool {
+        match self {
+            OperandTy::DstReg => matches!(ty, Type::Register(_)),
+            OperandTy::SrcReg => matches!(ty, Type::Register(_)),
+            OperandTy::WideSrc => true,
+        }
+    }
 }
 
 pub struct OperandSlot {
@@ -50,7 +63,7 @@ const DST_SRC: OperandSlots = OperandSlots::new(&[
 ]);
 
 /// Get the shape of the operand slots for an opcode
-pub fn slots_for_op(op: OpCode) -> OperandSlots {
+pub fn slots_for_opcode(op: OpCode) -> OperandSlots {
     match op {
         OpCode::Nop => todo!(),
         OpCode::End => todo!(),

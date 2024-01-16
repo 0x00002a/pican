@@ -1,5 +1,3 @@
-
-
 use bumpalo::Bump;
 use codespan::FileId;
 use serde::{Deserialize, Serialize};
@@ -130,6 +128,12 @@ impl<T> IrNode<T> {
         T: Copy,
     {
         self.map(|v| v)
+    }
+    pub fn alloc_in(self, b: &Bump) -> IrNode<&T>
+    where
+        T: Copy,
+    {
+        self.map(|v| -> &_ { b.alloc(v) })
     }
 }
 

@@ -56,7 +56,6 @@ pub struct Operand<'a> {
 pub enum OperandKind<'a> {
     Var(IrNode<Ident<'a>>),
     Register(IrNode<Register>),
-    Constant(IrNode<ConstantUniform<'a>>),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]

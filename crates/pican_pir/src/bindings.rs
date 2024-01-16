@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use pican_core::{
+    diagnostics::{DiagnosticBuilder, Diagnostics, FatalErrorEmitted},
     ir::{Ident, IrNode, SwizzleDims},
     register::Register,
 };
@@ -38,14 +39,23 @@ impl<'a> Bindings<'a> {
         self.tbl.get(name.get()).map(|Binding { name, .. }| *name)
     }
 
-    pub fn lookup(&self, name: IrNode<Ident>) -> Option<IrNode<BindingValue<'a>>> {
-        if let Some(prev) = self.previous_definition(name) {
-            assert_eq!(
-                prev, name,
-                "an identifier different with a conflicting name already existed when doing lookup"
-            );
-        }
-        self.tbl.get(name.get()).map(|b| b.value)
+    pub fn lookup(&self, name: &Ident) -> Option<IrNode<BindingValue<'a>>> {
+        self.tbl.get(name).map(|b| b.value)
+    }
+    pub fn lookup_with_diag(
+        &self,
+        name: IrNode<Ident>,
+        diag: &Diagnostics,
+    ) -> Result<IrNode<BindingValue<'a>>, FatalErrorEmitted> {
+        self.lookup(name.get()).ok_or_else(|| {
+            diag.fatal::<()>(
+                DiagnosticBuilder::error()
+                    .at(&name)
+                    .primary("cannot find binding for identifier")
+                    .build(),
+            )
+            .unwrap_err()
+        })
     }
 }
 

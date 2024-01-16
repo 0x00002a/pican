@@ -7,3 +7,6 @@ edition = "2021"
 
 [dependencies]
 pican_core = { path = "../pican_core", version = "0.1.0" }
+pican_pir = { path = "../pican_pir", version = "0.1.0" }
+
+typesum = "0.2.0"

@@ -282,6 +282,8 @@ name = "pican_ty"
 version = "0.1.0"
 dependencies = [
  "pican_core",
+ "pican_pir",
+ "typesum",
 ]
 
 [[package]]
