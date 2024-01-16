@@ -4,7 +4,7 @@ use lower::FrontendToPirCtx;
 use pican_core::{
     alloc::Bump,
     context::{IrContext, PicanContext},
-    diagnostics::{DiagnosticBuilder},
+    diagnostics::DiagnosticBuilder,
     span::FileId,
 };
 
@@ -13,7 +13,6 @@ pub mod lower;
 pub mod parse;
 mod parse_ext;
 
-// todo: parse and lower needs to propagate lowering errors
 pub fn parse_and_lower<'a, S: AsRef<str>>(
     file: FileId,
     ctx: &PicanContext<S>,
