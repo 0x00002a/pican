@@ -1,6 +1,6 @@
 use pican_core::{
     diagnostics::{DiagnosticBuilder, Diagnostics, FatalErrorEmitted},
-    ir::{HasSpan, Ident, IrNode},
+    ir::{Ident, IrNode},
     ops::OpCode,
 };
 use pican_pir::{

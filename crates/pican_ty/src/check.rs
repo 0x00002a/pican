@@ -4,9 +4,9 @@ use pir::ir::Op;
 
 use crate::{context::TyContext, ops::slots_for_opcode};
 
-pub(crate) fn check_operation<'a, 'b>(
+pub(crate) fn check_operation<'a>(
     op: &Op<'a>,
-    ctx: &TyContext<'a, 'b>,
+    ctx: &TyContext<'a, '_>,
 ) -> Result<(), FatalErrorEmitted> {
     let slots = slots_for_opcode(*op.opcode.get());
     for (slot, operand) in slots.slots.iter().zip(op.operands.get().iter()) {
