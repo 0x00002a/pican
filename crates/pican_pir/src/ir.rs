@@ -19,6 +19,8 @@ pub struct Module<'a> {
     pub bindings: Bindings<'a>,
     pub outputs: &'a [IrNode<&'a OutputBinding<'a>>],
     pub inputs: &'a [IrNode<&'a InputBinding<'a>>],
+    /// Whether to not produce a DVLE output from this module
+    pub no_dvle: bool,
 }
 #[derive(Debug, Serialize, PartialEq, Eq, Clone, Hash)]
 pub struct InputBinding<'a> {

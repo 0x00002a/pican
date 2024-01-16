@@ -32,7 +32,7 @@ impl FrontendToPirCtx for IrContext {
 }
 
 mod lowering {
-    
+
     use pican_core::{
         alloc::{Bump, BumpVec},
         context::PicanContext,
@@ -42,8 +42,8 @@ mod lowering {
     };
 
     use crate::ast::{
-        Constant, FunctionDecl, Op, Operand, OperandKind, Operands, OutputBind,
-        RegisterBindTarget, Statement, SwizzleExpr, UniformTy,
+        Constant, FunctionDecl, Op, Operand, OperandKind, Operands, OutputBind, RegisterBindTarget,
+        Statement, SwizzleExpr, UniformTy,
     };
     use pican_pir::bindings::{self as pib, SwizzleValue};
     use pican_pir::ir as pir;
@@ -55,6 +55,7 @@ mod lowering {
         entry_points: BumpVec<'a, IrNode<pir::EntryPoint<'a>>>,
         outputs: BumpVec<'a, IrNode<&'a pir::OutputBinding<'a>>>,
         inputs: BumpVec<'a, IrNode<&'a pir::InputBinding<'a>>>,
+        no_dvle: bool,
     }
     impl<'a, 'c, S: AsRef<str>> PirLower<'a, 'c, S> {
         pub fn new(alloc: &'a Bump, ctx: &'c PicanContext<S>) -> Self {
@@ -65,6 +66,7 @@ mod lowering {
                 entry_points: BumpVec::new_in(alloc),
                 outputs: BumpVec::new_in(alloc),
                 inputs: BumpVec::new_in(alloc),
+                no_dvle: false,
             }
         }
 
@@ -86,6 +88,7 @@ mod lowering {
                 bindings: self.bindings,
                 outputs: self.outputs.into_bump_slice(),
                 inputs: self.inputs.into_bump_slice(),
+                no_dvle: self.no_dvle,
             }
         }
         fn unif_len_check<T>(&self, node: IrNode<&[T]>) -> Result<(), FatalErrorEmitted> {
@@ -172,6 +175,16 @@ mod lowering {
                     self.bindings.define(b.get().name, b);
                     Ok(())
                 }
+                Statement::Directive(d) => match d.get() {
+                    crate::ast::Directive::NoDvle => {
+                        self.no_dvle = true;
+                        Ok(())
+                    }
+                    crate::ast::Directive::Entry(_) => {
+                        todo!("handle entrypoint for shader")
+                    }
+                    crate::ast::Directive::Gsh => todo!("handle geometry shaders"),
+                },
             }
         }
         fn lower<L: Lower>(&self, t: L) -> Result<L::Pir<'a>, FatalErrorEmitted> {

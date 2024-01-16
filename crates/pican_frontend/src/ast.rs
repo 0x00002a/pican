@@ -1,9 +1,6 @@
-
-
-
 use pican_core::properties::OutputProperty;
 use pican_core::register::Register;
-use serde::{Serialize};
+use serde::Serialize;
 
 use pican_core::ir::{Float, IrNode, SwizzleDims};
 
@@ -32,9 +29,23 @@ pub enum Statement {
     Uniform(UniformDecl),
     Constant(ConstantDecl),
     OutputBind(OutputBind),
+    Directive(Directive),
     InputBind(InputBind)
 }
 }
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum Directive<'a> {
+    /// Directive telling us not to generate a DVLE for this module
+    NoDvle,
+    /// Manually defined entrypoint for this DVLE
+    Entry(IrNode<Ident<'a>>),
+    /// Geometry shader
+    ///
+    /// TODO: Actually implement parsing of this
+    Gsh,
+}
+
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct InputBind<'a>(pub IrNode<Ident<'a>>);
 

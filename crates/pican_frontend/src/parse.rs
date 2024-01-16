@@ -1,8 +1,8 @@
 use super::ast::Stmt;
 use crate::ast::{
-    self, Block, Constant, ConstantDecl, ConstantDiscriminants, FunctionDecl, Ident, InputBind, Op,
-    OpCode, Operand, OperandKind, Operands, OutputBind, RegisterBind, Statement, SwizzleExpr,
-    Uniform, UniformDecl, UniformTy,
+    self, Block, Constant, ConstantDecl, ConstantDiscriminants, Directive, FunctionDecl, Ident,
+    InputBind, Op, OpCode, Operand, OperandKind, Operands, OutputBind, RegisterBind, Statement,
+    SwizzleExpr, Uniform, UniformDecl, UniformTy,
 };
 use crate::parse_ext::ParserExt;
 
@@ -212,6 +212,7 @@ where
 
 fn stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
     branch::alt((
+        nfo(directive).map(Into::into),
         nfo(input_bind).map(Into::into),
         nfo(output_bind).map(Into::into),
         nfo(constant_decl).map(Into::into),
@@ -456,6 +457,20 @@ fn output_property<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OutputProperty
     ])
     .parse(i)
 }
+fn directive<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Directive<'a>> {
+    let (i, _) = tag(".")(i)?;
+    let (i, d) = tag("nodvle")
+        .ctx(".nodvle")
+        .map(|_| Directive::NoDvle)
+        .or(tag("entry")
+            .ctx(".entry")
+            .ignore_then(nmc::multispace0)
+            .ignore_then(nfo(ident.req("expected proc name for .entry")))
+            .map(Directive::Entry))
+        .parse(i)?;
+    Ok((i, d))
+}
+
 fn output_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OutputBind<'a>> {
     let (i, _) = tag(".out")(i)?;
     let (i, _) = space(i)?;
