@@ -1,47 +1,73 @@
 use pican_core::{
     diagnostics::FatalErrorEmitted,
     ir::{Ident, IrNode},
-    register::RegisterKind,
+    register::{RegisterKind, RegisterType},
 };
 use pican_pir::{bindings::Bindings, ir::Operand};
 use typesum::sumtype;
 
 use crate::context::TyContext;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[sumtype]
 pub enum Type {
     UniformArray(UniformArrayTy),
     Register(RegisterTy),
     VecUniform(VecUniformTy),
 }
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::UniformArray(u) => u.fmt(f),
+            Type::Register(r) => r.fmt(f),
+            Type::VecUniform(u) => u.fmt(f),
+        }
+    }
+}
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum PrimTy {
     Float,
     Integer,
     Bool,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct VecUniformTy {
     pub prim_ty: PrimTy,
 }
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RegisterTy {
-    pub prim_ty: PrimTy,
-}
-
-impl RegisterTy {
-    pub fn new(prim_ty: PrimTy) -> Self {
-        Self { prim_ty }
+impl std::fmt::Display for VecUniformTy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("Vec4<{:?}>", self.prim_ty))
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct RegisterTy {
+    pub prim_ty: PrimTy,
+    pub kind: RegisterKind,
+}
+impl std::fmt::Display for RegisterTy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("@{:?}<{:?}>", self.kind, self.prim_ty))
+    }
+}
+
+impl RegisterTy {
+    pub fn new(prim_ty: PrimTy, kind: RegisterKind) -> Self {
+        Self { prim_ty, kind }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct UniformArrayTy {
     pub len: usize,
     pub element_ty: PrimTy,
+}
+impl std::fmt::Display for UniformArrayTy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("[{:?}; {}]", self.element_ty, self.len))
+    }
 }
 
 pub(crate) trait Typed {
@@ -58,8 +84,11 @@ impl<'a> ContextuallyTyped<'a> for IrNode<pican_pir::bindings::BindingValue<'a>>
             BindingValue::Register(r) => ctx.type_of(&r.kind),
             BindingValue::Uniform(u) => ctx.type_of(u),
             BindingValue::Constant(v) => ctx.type_of(v),
-            BindingValue::OutputProperty(_) | BindingValue::Input(_) => {
-                Ok(RegisterTy::new(PrimTy::Float).into())
+            BindingValue::OutputProperty(_) => {
+                Ok(RegisterTy::new(PrimTy::Float, RegisterKind::Output).into())
+            }
+            BindingValue::Input(_) => {
+                Ok(RegisterTy::new(PrimTy::Float, RegisterKind::Input).into())
             }
             BindingValue::SwizzleVar(s) => ctx.type_of(&s.target),
             BindingValue::SwizzleRegister(s) => ctx.type_of(&s.target.get().kind),
@@ -109,8 +138,8 @@ impl Typed for pican_pir::ir::Uniform {
 impl Typed for RegisterKind {
     fn ty(&self) -> Type {
         match self {
-            RegisterKind::Scratch | RegisterKind::Output | RegisterKind::Input => {
-                RegisterTy::new(PrimTy::Float).into()
+            k @ (RegisterKind::Scratch | RegisterKind::Output | RegisterKind::Input) => {
+                RegisterTy::new(PrimTy::Float, *k).into()
             }
             RegisterKind::FloatingVecUniform => VecUniformTy {
                 prim_ty: PrimTy::Float,
@@ -132,8 +161,12 @@ impl Typed for RegisterKind {
 impl<'a> Typed for pican_pir::ir::ConstantUniform<'a> {
     fn ty(&self) -> Type {
         match self {
-            pican_pir::ir::ConstantUniform::Integer(_) => RegisterTy::new(PrimTy::Integer).into(),
-            pican_pir::ir::ConstantUniform::Float(_) => RegisterTy::new(PrimTy::Float).into(),
+            pican_pir::ir::ConstantUniform::Integer(_) => {
+                RegisterTy::new(PrimTy::Integer, RegisterKind::Input).into()
+            }
+            pican_pir::ir::ConstantUniform::Float(_) => {
+                RegisterTy::new(PrimTy::Float, RegisterKind::Input).into()
+            }
             pican_pir::ir::ConstantUniform::FloatArray(a) => UniformArrayTy {
                 len: a.get().len(),
                 element_ty: PrimTy::Float,

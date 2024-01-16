@@ -13,7 +13,7 @@ pub(crate) fn check_operation<'a, 'b>(
         let ty = ctx.type_of(operand.get())?;
         let ok = slot.allowed_types.iter().any(|t| t.matches(ty));
         if !ok {
-            return ctx.emit_slot_mismatch(op.opcode, operand);
+            return ctx.emit_slot_mismatch(op.opcode, operand, slot);
         }
     }
     Ok(())

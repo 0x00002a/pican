@@ -3,10 +3,14 @@ use pican_core::{
     ir::{HasSpan, Ident, IrNode},
     ops::OpCode,
 };
-use pican_pir::{bindings::BindingValue, ir::Module};
+use pican_pir::{
+    bindings::BindingValue,
+    ir::{Module, Operand},
+};
 
 use crate::{
     check,
+    ops::OperandSlot,
     ty::{ContextuallyTyped, Type},
 };
 
@@ -52,13 +56,22 @@ impl<'a, 'b> TyContext<'a, 'b> {
     pub(crate) fn emit_slot_mismatch(
         &self,
         op: IrNode<OpCode>,
-        slot: &impl HasSpan,
+        operand: &IrNode<Operand<'a>>,
+        slot: &OperandSlot,
     ) -> Result<(), FatalErrorEmitted> {
         self.diag.fatal(
             DiagnosticBuilder::error()
-                .at(slot)
+                .at(operand)
                 .primary("type mismatch")
                 .note(&op, format!("for opcode {}", op.get()))
+                .note(
+                    &operand.get().kind,
+                    format!(
+                        "expected one of {:?} but got {}",
+                        slot.allowed_types,
+                        self.type_of(operand.get())?,
+                    ),
+                )
                 .build(),
         )
     }
