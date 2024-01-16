@@ -9,6 +9,7 @@ edition = "2021"
 pican_pir = { path = "../crates/pican_pir", version = "0.1.0" }
 pican_core = { path = "../crates/pican_core", version = "0.1.0" }
 pican_frontend = { path = "../crates/pican_frontend", version = "0.1.0" }
+pican_ty = { path = "../crates/pican_ty", version = "0.1.0" }
 codespan-reporting = "0.11.1"
 
 [build-dependencies]

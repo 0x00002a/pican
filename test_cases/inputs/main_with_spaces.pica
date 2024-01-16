@@ -1,3 +1,4 @@
+.in mm
 .proc main
     ; c
     dp4 r1, mm, r0
