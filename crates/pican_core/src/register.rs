@@ -5,6 +5,7 @@ use strum::{EnumIter, IntoEnumIterator};
 
 /// Every kind of register
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter)]
+#[serde(rename_all = "snake_case")]
 pub enum RegisterKind {
     Input,
     Output,

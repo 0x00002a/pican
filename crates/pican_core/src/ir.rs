@@ -178,6 +178,7 @@ impl<T> IrNode<IrNode<T>> {
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
 pub enum SwizzleDim {
     X,
     Y,

@@ -15,8 +15,8 @@ use super::bindings::Bindings;
 /// Single shader module
 #[derive(Debug, Serialize, PartialEq, Eq, Clone)]
 pub struct Module<'a> {
-    pub entry_points: &'a [IrNode<EntryPoint<'a>>],
     pub bindings: Bindings<'a>,
+    pub entry_points: &'a [IrNode<EntryPoint<'a>>],
     pub outputs: &'a [IrNode<&'a OutputBinding<'a>>],
     pub inputs: &'a [IrNode<&'a InputBinding<'a>>],
     /// Whether to not produce a DVLE output from this module
@@ -55,6 +55,7 @@ pub struct Operand<'a> {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 #[typesum::sumtype]
+#[serde(rename_all = "snake_case", tag = "ty", content = "value")]
 pub enum OperandKind<'a> {
     Var(IrNode<Ident<'a>>),
     Register(IrNode<Register>),
@@ -74,6 +75,7 @@ pub struct Uniform {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", tag = "ty", content = "value")]
 pub enum ConstantUniform<'a> {
     Integer(IrNode<[IrNode<u32>; 4]>),
     Float(IrNode<[IrNode<Float>; 4]>),

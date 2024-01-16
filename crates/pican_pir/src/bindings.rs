@@ -17,6 +17,7 @@ struct Binding<'a> {
 
 #[derive(Debug, Default, Serialize, PartialEq, Eq, Clone)]
 pub struct Bindings<'a> {
+    #[serde(flatten)]
     tbl: HashMap<Ident<'a>, Binding<'a>>,
 }
 
@@ -61,6 +62,7 @@ impl<'a> Bindings<'a> {
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
 #[typesum::sumtype(only = from)]
+#[serde(rename_all = "snake_case", tag = "ty", content = "value")]
 pub enum BindingValue<'a> {
     SwizzleRegister(SwizzleValue<'a, Register>),
     SwizzleVar(SwizzleValue<'a, Ident<'a>>),
