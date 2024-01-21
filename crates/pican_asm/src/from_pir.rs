@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use pican_core::{
     context::PicanContext,
     diagnostics::{Diagnostics, FatalErrorEmitted},
-    ir::Ident,
+    ir::{Ident, SwizzleDims},
     register::{Register, RegisterKind},
 };
 use pican_pir::{
@@ -93,14 +93,38 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
             kind: RegHoleKind::Fixed(r),
         }
     }
+    fn resolve_operand_ident(&mut self, ident: &Ident<'a>) -> (RegHole, Option<SwizzleDims<'a>>) {
+        match self
+            .pir
+            .bindings
+            .lookup(ident)
+            .expect("missing identifier, should've been caught earlier")
+            .into_inner()
+        {
+            BindingValue::SwizzleRegister(v) => (
+                *self.ident_to_reg.get(ident).unwrap(),
+                Some(v.swizzle.into_inner()),
+            ),
+            BindingValue::SwizzleVar(v) => {
+                // todo: should swizzles compose?
+                (
+                    self.resolve_operand_ident(v.target.get()).0,
+                    Some(v.swizzle.into_inner()),
+                )
+            }
+            BindingValue::Alias(i) => self.resolve_operand_ident(&i),
+            _ => (*self.ident_to_reg.get(ident).unwrap(), None),
+        }
+    }
     fn lower_operand(&mut self, operand: &Operand<'a>) -> ir::Operand {
-        let register = match operand.kind.get() {
-            pican_pir::ir::OperandKind::Var(v) => *self.ident_to_reg.get(v.get()).unwrap(),
-            pican_pir::ir::OperandKind::Register(r) => self.lower_register(*r.get()),
+        let (register, swizzle) = match operand.kind.get() {
+            pican_pir::ir::OperandKind::Var(v) => self.resolve_operand_ident(v.get()),
+            pican_pir::ir::OperandKind::Register(r) => (self.lower_register(*r.get()), None),
         };
         let swizzle = operand
             .swizzle
             .map(|s| s.into_inner())
+            .or(swizzle)
             .map(|s| s.0.into_inner())
             .map(|s| s.iter().copied().collect());
         ir::Operand { register, swizzle }
@@ -131,14 +155,30 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
         for (name, value) in self.pir.bindings.entries() {
             let name = *name.get();
             match value.get() {
-                pican_pir::bindings::BindingValue::SwizzleRegister(_) => todo!(),
-                pican_pir::bindings::BindingValue::SwizzleVar(_) => todo!(),
-                pican_pir::bindings::BindingValue::Alias(_) => todo!(),
                 pican_pir::bindings::BindingValue::Register(r) => {
                     let reg = self.lower_register(*r);
                     self.ident_to_reg.insert(name, reg);
                 }
-                pican_pir::bindings::BindingValue::Uniform(_) => todo!(),
+                pican_pir::bindings::BindingValue::Uniform(u) => {
+                    let id = self.regs.next_reg_id();
+                    self.ident_to_reg.insert(
+                        name,
+                        RegHole {
+                            id,
+                            kind: RegHoleKind::Free(FreeRegister {
+                                kind: match u.ty.get() {
+                                    pican_pir::ty::UniformTy::Bool => RegisterKind::BoolUniform,
+                                    pican_pir::ty::UniformTy::Integer => {
+                                        RegisterKind::IntegerVecUniform
+                                    }
+                                    pican_pir::ty::UniformTy::Float => {
+                                        RegisterKind::FloatingVecUniform
+                                    }
+                                },
+                            }),
+                        },
+                    );
+                }
                 pican_pir::bindings::BindingValue::Constant(c) => match c {
                     pican_pir::ir::ConstantUniform::Integer(i) => {
                         let i = i.get();
@@ -207,6 +247,10 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     self.ident_to_reg.insert(name, reg);
                 }
                 pican_pir::bindings::BindingValue::Input(_) => todo!(),
+
+                pican_pir::bindings::BindingValue::SwizzleRegister(_)
+                | pican_pir::bindings::BindingValue::SwizzleVar(_)
+                | pican_pir::bindings::BindingValue::Alias(_) => {}
             }
         }
         for ent in self.pir.entry_points {
