@@ -42,7 +42,7 @@ fn main() {
     let ok = tycheck.check().is_ok();
     print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);
 
-    if ok {
+    if ok && args.dump_pir {
         let json = serde_json::to_string_pretty(&pir).unwrap();
         println!("{json}");
     }
