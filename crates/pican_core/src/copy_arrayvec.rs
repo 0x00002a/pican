@@ -2,11 +2,20 @@ use std::{mem::MaybeUninit, ops::Deref};
 
 use serde::Serialize;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct CopyArrayVec<T: Copy, const MAX: usize> {
     buf: [MaybeUninit<T>; MAX],
     len: usize,
 }
+impl<T: Copy + std::fmt::Debug, const MAX: usize> std::fmt::Debug for CopyArrayVec<T, MAX> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CopyArrayVec")
+            .field("max", &MAX)
+            .field("buf", &self.deref())
+            .finish()
+    }
+}
+
 impl<T: Copy, const MAX: usize> Default for CopyArrayVec<T, MAX> {
     fn default() -> Self {
         Self {
@@ -60,5 +69,15 @@ impl<T: Copy + Eq, const MAX: usize> Eq for CopyArrayVec<T, MAX> {}
 impl<T: Copy + std::hash::Hash, const MAX: usize> std::hash::Hash for CopyArrayVec<T, MAX> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.deref().hash(state)
+    }
+}
+
+impl<T: Copy, const MAX: usize> FromIterator<T> for CopyArrayVec<T, MAX> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let mut me = Self::default();
+        for item in iter {
+            me.push(item);
+        }
+        me
     }
 }
