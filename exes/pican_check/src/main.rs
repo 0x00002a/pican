@@ -1,3 +1,4 @@
+use args::Args;
 use clap::Parser;
 use codespan_reporting::{
     files::Files,
@@ -5,6 +6,7 @@ use codespan_reporting::{
 };
 use pican_core::{
     context::{IrContext, PicanContext},
+    diagnostics::FatalErrorEmitted,
     span::FileId,
 };
 use pican_frontend::parse_and_lower;
@@ -23,6 +25,20 @@ fn print_diagnostics<'a>(
     }
 }
 
+fn run<S: AsRef<str>>(args: &Args, input_id: FileId, ctx: &mut PicanContext<S>) -> Option<()> {
+    let pir_ctx = IrContext::new();
+    let pir = parse_and_lower(input_id, &ctx, &pir_ctx)?;
+    let tycheck = ctx.types_for_module(&pir);
+    tycheck.check().ok()?;
+
+    if args.dump_pir {
+        let json = serde_json::to_string_pretty(&pir).unwrap();
+        println!("{json}");
+    }
+
+    Some(())
+}
+
 fn main() {
     let args = args::Args::parse();
 
@@ -31,19 +47,6 @@ fn main() {
         &args.input,
         std::fs::read_to_string(&args.input).expect("failed to read input"),
     );
-
-    let pir_ctx = IrContext::new();
-    let pir = parse_and_lower(input_id, &ctx, &pir_ctx);
-    let Some(pir) = pir else {
-        print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);
-        return;
-    };
-    let tycheck = ctx.types_for_module(&pir);
-    let ok = tycheck.check().is_ok();
+    let _ = run(&args, input_id, &mut ctx);
     print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);
-
-    if ok && args.dump_pir {
-        let json = serde_json::to_string_pretty(&pir).unwrap();
-        println!("{json}");
-    }
 }
