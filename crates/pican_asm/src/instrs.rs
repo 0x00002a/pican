@@ -3,6 +3,7 @@ use crate::ir::Instruction;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct InstructionOffset(usize);
 
+#[derive(Debug, Default)]
 pub struct InstructionPack {
     instrs: Vec<Instruction>,
 }

@@ -14,7 +14,9 @@ use pican_pir::{
 use crate::{
     context::AsmContext,
     instrs::InstructionPack,
-    ir::{FreeRegister, Instruction, Operation, ProcId, RegHole, RegHoleKind, RegisterId, Vec4},
+    ir::{
+        self, FreeRegister, Instruction, Operation, ProcId, RegHole, RegHoleKind, RegisterId, Vec4,
+    },
 };
 
 #[derive(Debug)]
@@ -91,11 +93,17 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
             kind: RegHoleKind::Fixed(r),
         }
     }
-    fn lower_operand(&mut self, operand: &Operand<'a>) -> Result<RegHole, FatalErrorEmitted> {
-        match operand.kind.get() {
-            pican_pir::ir::OperandKind::Var(v) => Ok(*self.ident_to_reg.get(v.get()).unwrap()),
-            pican_pir::ir::OperandKind::Register(r) => Ok(self.lower_register(*r.get())),
-        }
+    fn lower_operand(&mut self, operand: &Operand<'a>) -> ir::Operand {
+        let register = match operand.kind.get() {
+            pican_pir::ir::OperandKind::Var(v) => *self.ident_to_reg.get(v.get()).unwrap(),
+            pican_pir::ir::OperandKind::Register(r) => self.lower_register(*r.get()),
+        };
+        let swizzle = operand
+            .swizzle
+            .map(|s| s.into_inner())
+            .map(|s| s.0.into_inner())
+            .map(|s| s.iter().copied().collect());
+        ir::Operand { register, swizzle }
     }
     fn lower_entry_point(&mut self, ent: &EntryPoint<'a>) -> Result<(), FatalErrorEmitted> {
         let id = self.procs.id_for(*ent.name.get());
@@ -108,7 +116,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                 .get()
                 .iter()
                 .map(|operand| self.lower_operand(operand.get()))
-                .collect::<Result<_, _>>()?;
+                .collect();
             self.asm.push(Operation {
                 opcode: op.opcode.into_inner(),
                 operands,
@@ -119,7 +127,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
             .push(Instruction::Directive(crate::ir::Directive::End));
         Ok(())
     }
-    fn lower(mut self) -> Result<(), FatalErrorEmitted> {
+    fn lower(mut self) -> Result<(AsmContext, InstructionPack), FatalErrorEmitted> {
         for (name, value) in self.pir.bindings.entries() {
             let name = *name.get();
             match value.get() {
@@ -204,16 +212,25 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
         for ent in self.pir.entry_points {
             self.lower_entry_point(ent.get())?;
         }
-        Ok(())
+        Ok((self.asm_ctx, self.asm))
     }
 }
 
-pub fn from_pir<'a, S: AsRef<str>>(
-    pir: &Module<'a>,
+pub fn from_pir<S: AsRef<str>>(
+    pir: &Module<'_>,
     ctx: &PicanContext<S>,
-) -> Result<(), FatalErrorEmitted> {
+) -> Result<(AsmContext, InstructionPack), FatalErrorEmitted> {
     let asm_ctx = AsmContext::new();
-    let mut procs = ProcCache::default();
+    let procs = ProcCache::default();
 
-    todo!()
+    LowerCtx {
+        asm_ctx,
+        procs,
+        asm: InstructionPack::default(),
+        pir,
+        diag: &ctx.diag,
+        regs: RegCache::default(),
+        ident_to_reg: Default::default(),
+    }
+    .lower()
 }

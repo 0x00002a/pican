@@ -58,6 +58,11 @@ impl<'a> Bindings<'a> {
             .unwrap_err()
         })
     }
+    pub fn entries<'me>(
+        &'me self,
+    ) -> impl Iterator<Item = (IrNode<Ident<'a>>, IrNode<BindingValue<'a>>)> + 'me {
+        self.tbl.values().map(|v| (v.name, v.value))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]

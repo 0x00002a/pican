@@ -1,6 +1,6 @@
 use pican_core::{
     copy_arrayvec::CopyArrayVec,
-    ir::{Float, Ident},
+    ir::{Float, Ident, SwizzleDim, SwizzleDims},
     ops::OpCode,
     properties::OutputProperty,
     register::{Register, RegisterKind},
@@ -45,11 +45,16 @@ pub struct RegHole {
     pub id: RegisterId,
     pub kind: RegHoleKind,
 }
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize)]
+pub struct Operand {
+    pub register: RegHole,
+    pub swizzle: Option<CopyArrayVec<SwizzleDim, 4>>,
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize)]
 pub struct Operation {
     pub opcode: OpCode,
-    pub operands: CopyArrayVec<RegHole, 4>,
+    pub operands: CopyArrayVec<Operand, 4>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize, Deserialize)]
