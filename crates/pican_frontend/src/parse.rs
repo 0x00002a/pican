@@ -353,7 +353,7 @@ fn constant_decl<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, ConstantDecl<'a>
         .parse(i)?;
     let (i, value) = match discrim {
         ConstantDiscriminants::Integer => {
-            let (i, values) = nfo(parse_values(nfo(nmc::u32)))(i)?;
+            let (i, values) = nfo(parse_values(nfo(nmc::i32)))(i)?;
             let s = values.span();
             (i, IrNode::new(Constant::Integer(values), s))
         }

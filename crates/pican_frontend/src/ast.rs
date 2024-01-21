@@ -58,7 +58,7 @@ pub struct OutputBind<'a> {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug, EnumDiscriminants)]
 pub enum Constant<'a> {
-    Integer(IrNode<&'a [IrNode<u32>]>),
+    Integer(IrNode<&'a [IrNode<i32>]>),
     Float(IrNode<&'a [IrNode<Float>]>),
     FloatArray {
         elements: IrNode<&'a [IrNode<&'a [IrNode<Float>]>]>,

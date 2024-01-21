@@ -77,7 +77,7 @@ pub struct Uniform {
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "ty", content = "value")]
 pub enum ConstantUniform<'a> {
-    Integer(IrNode<[IrNode<u32>; 4]>),
+    Integer(IrNode<[IrNode<i32>; 4]>),
     Float(IrNode<[IrNode<Float>; 4]>),
     FloatArray(IrNode<&'a [IrNode<[IrNode<Float>; 4]>]>),
 }
