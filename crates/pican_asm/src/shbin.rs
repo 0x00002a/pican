@@ -6,7 +6,8 @@ use std::{
 use binrw::{
     binread, binrw, binwrite,
     file_ptr::{FilePtr, IntoSeekFrom},
-    BinRead, BinReaderExt, BinResult, BinWrite, BinWriterExt, NamedArgs, PosValue, VecArgs,
+    BinRead, BinReaderExt, BinResult, BinWrite, BinWriterExt, NamedArgs, NullString, PosValue,
+    VecArgs,
 };
 use pican_core::{
     properties::OutputProperty,
@@ -79,6 +80,8 @@ pub struct ExecutableSection {
     pub output_register_table: OffsetTable<OutputRegisterEntry>,
     #[br(args { header_start, inner: () })]
     pub uniform_table: OffsetTable<UniformTableEntry>,
+    #[br(args { header_start, inner: () })]
+    pub symbol_table: StringTable,
 }
 impl BinWrite for ExecutableSection {
     type Args<'a> = ();
@@ -109,7 +112,6 @@ impl BinWrite for ExecutableSection {
                 Ok(())
             }
         }
-        let p = writer.stream_position()?;
         let mut w = TablesWriter {
             writer,
             endian,
@@ -119,13 +121,18 @@ impl BinWrite for ExecutableSection {
         w.write(&self.label_table)?;
         w.write(&self.output_register_table)?;
         w.write(&self.uniform_table)?;
-
-        writer.seek(SeekFrom::Current(8))?;
+        let off = w.offset;
+        writer.write_type_args(
+            &self.symbol_table,
+            endian,
+            OffsetTableWriteArgs { offset: off },
+        )?;
 
         writer.write_type(&self.constant_table.data, endian)?;
         writer.write_type(&self.label_table.data, endian)?;
         writer.write_type(&self.output_register_table.data, endian)?;
         writer.write_type(&self.uniform_table.data, endian)?;
+        writer.write_type(&self.symbol_table.0, endian)?;
 
         Ok(())
     }
@@ -136,6 +143,50 @@ pub trait BinSize {
 impl<T: BinSize> OffsetTable<T> {
     fn add_offset(&self) -> usize {
         self.data.len() * T::bin_size()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct StringTable(pub Vec<NullString>);
+
+impl BinRead for StringTable {
+    type Args<'a> = OffsetTableArgs<()>;
+
+    fn read_options<R: std::io::prelude::Read + Seek>(
+        reader: &mut R,
+        endian: binrw::Endian,
+        args: Self::Args<'_>,
+    ) -> BinResult<Self> {
+        let offset: u32 = reader.read_type(endian)?;
+        let size: u32 = reader.read_type(endian)?;
+        let pos = reader.stream_position()?;
+        let to = args.header_start + offset as u64;
+        reader.seek(SeekFrom::Start(to))?;
+        let mut syms = Vec::new();
+        let end = to + size as u64;
+        while reader.stream_position()? < end {
+            let string = NullString::read_options(reader, endian, ())?;
+            syms.push(string);
+        }
+        assert_eq!(reader.stream_position()?, end);
+
+        reader.seek(SeekFrom::Start(pos))?;
+        Ok(Self(syms))
+    }
+}
+impl BinWrite for StringTable {
+    type Args<'a> = OffsetTableWriteArgs;
+
+    fn write_options<W: std::io::prelude::Write + Seek>(
+        &self,
+        writer: &mut W,
+        endian: binrw::Endian,
+        args: Self::Args<'_>,
+    ) -> BinResult<()> {
+        writer.write_type(&args.offset, endian)?;
+        let size = self.0.iter().map(|s| s.0.len()).sum::<usize>() as u32;
+        writer.write_type(&size, endian)?;
+        Ok(())
     }
 }
 
@@ -343,7 +394,7 @@ pub enum ShaderType {
 mod tests {
     use std::io::{Cursor, SeekFrom};
 
-    use binrw::{binread, BinReaderExt};
+    use binrw::{binread, BinReaderExt, BinWrite};
 
     use super::Shbin;
 
@@ -351,6 +402,9 @@ mod tests {
     fn try_example() {
         let input = include_bytes!("./example.shbin");
         let shbin: Shbin = Cursor::new(input).read_le().unwrap();
+        let mut w = Cursor::new(Vec::new());
+        shbin.write_le(&mut w).unwrap();
+        assert_eq!(w.into_inner(), input);
         panic!("{shbin:#?}");
     }
 }
