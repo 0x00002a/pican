@@ -8,7 +8,15 @@
 /// More info: https://www.3dbrew.org/wiki/GPU/Shader_Instruction_Set#Floating-Point_Behavior
 #[repr(C)]
 #[derive(Clone, Copy)]
+#[binrw::binrw]
+#[brw(little)]
 pub struct Float24([u8; 3]);
+
+impl std::fmt::Debug for Float24 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.to_f32().fmt(f)
+    }
+}
 
 #[derive(Debug)]
 pub enum F32ToF24ConversionError {
