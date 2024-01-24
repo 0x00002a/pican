@@ -1,5 +1,5 @@
 use std::{
-    io::{Seek, SeekFrom},
+    io::{Cursor, Seek, SeekFrom},
     mem::size_of,
 };
 
@@ -15,36 +15,83 @@ use pican_core::{
 
 use super::float24::Float24;
 
-#[binrw]
+#[binread]
 #[doc(alias = "DVLB")]
-#[brw(magic = b"DVLB")]
+#[br(magic = b"DVLB")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Shbin {
+    #[br(temp)]
     pub dvle_count: u32,
-    #[br(count = dvle_count)]
+    #[br(count = dvle_count, dbg)]
     pub dvle_offsets: Vec<u32>,
     pub dvlp: Dvlp,
     #[br(parse_with = binrw::file_ptr::parse_from_iter(dvle_offsets.iter().copied()), seek_before(SeekFrom::Start(0)))]
-    #[bw(align_after = 0x4)]
     pub dvles: Vec<ExecutableSection>,
 }
+impl BinWrite for Shbin {
+    type Args<'a> = ();
 
-#[binread]
-#[br(magic = b"DVLP", stream = s)]
+    fn write_options<W: std::io::prelude::Write + Seek>(
+        &self,
+        writer: &mut W,
+        endian: binrw::Endian,
+        args: Self::Args<'_>,
+    ) -> BinResult<()> {
+        let p = writer.stream_position()?;
+
+        let mut dvlp_buf = Cursor::new(Vec::new());
+        dvlp_buf.write_type(&self.dvlp, endian)?;
+
+        writer.write_type(b"DVLB", endian)?;
+
+        let dvle_count = self.dvles.len() as u32;
+        writer.write_type(&dvle_count, endian)?;
+        let mut dvle_offsets = Vec::new();
+        let mut off = (writer.stream_position()? - p)
+            + dvle_count as u64 * size_of::<u32>() as u64
+            + dvlp_buf.get_ref().len() as u64;
+
+        for dvle in &self.dvles {
+            let before = dvlp_buf.stream_position()?;
+            dvlp_buf.write_type(&dvle, endian)?;
+            dvle_offsets.push(off as u32);
+            let pos = dvlp_buf.stream_position()? - before;
+            off += pos;
+        }
+        let dvlp_buf = dvlp_buf.into_inner();
+        writer.write_type(&dvle_offsets, endian)?;
+        writer.write_all(&dvlp_buf)?;
+
+        Ok(())
+    }
+}
+
+#[binrw]
+#[brw(magic = b"DVLP", stream = s)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Dvlp {
     #[br(try_calc = s.stream_position().map(|p| p - 0x4))]
+    #[bw(ignore)]
     start: u64,
     #[br(temp)]
-    #[bw(calc = 4098)]
-    mversion: u32,
-    #[br(args { header_start: start, inner: () })]
+    #[bw(calc = 0)]
+    _mversion: u32,
+    #[br(args { header_start: start, inner: () }, dbg)]
+    #[bw(args { offset: 40 })]
     pub compiled_blob: SizedTable<u8>,
-    #[br(args { header_start: start, inner: () })]
+    #[br(args { header_start: start, inner: () }, dbg)]
+    #[bw(args { offset: (compiled_blob.data.bin_size() * 4) as u64 + 40 })]
     pub operand_desc_table: OffsetTable<u8>,
     pub rest: [u32; 4],
+    #[br(ignore)]
+    #[bw(calc = compiled_blob.data.0.clone())]
+    compiled_blog_data: Vec<u8>,
+    #[br(ignore)]
+    #[bw(calc = operand_desc_table.data.clone())]
+    operand_desc_data: Vec<u8>,
 }
 
+/*
 impl BinWrite for Dvlp {
     type Args<'a> = ();
 
@@ -55,7 +102,7 @@ impl BinWrite for Dvlp {
         args: Self::Args<'_>,
     ) -> BinResult<()> {
         writer.write_type(&b"DVLP", endian)?;
-        writer.write_type(&0u16, endian)?; // version
+        writer.write_type(&0u32, endian)?; // version
         writer.write_type_args(
             &self.compiled_blob,
             endian,
@@ -83,7 +130,7 @@ impl BinWrite for Dvlp {
 
         Ok(())
     }
-}
+}*/
 
 impl BinSize for u8 {
     fn bin_size(&self) -> usize {
@@ -151,7 +198,6 @@ impl BinWrite for ExecutableSection {
         endian: binrw::Endian,
         args: Self::Args<'_>,
     ) -> BinResult<()> {
-        let start = writer.stream_position()?;
         writer.write_type(&self.header, endian)?;
         struct TablesWriter<'w, W> {
             writer: &'w mut W,
@@ -220,11 +266,11 @@ where
     T: BinRead + BinWrite + BinSize,
     for<'a> <T as BinRead>::Args<'a>: Clone,
 {
-    #[bw(ignore)]
+    #[bw(calc = args.offset as u32)]
     #[br(temp)]
     offset: u32,
     #[br(temp)]
-    #[bw(calc = data.0.iter().map(|d| d.bin_size()).sum::<usize>() as u32)]
+    #[bw(calc = data.bin_size() as u32)]
     size: u32,
     #[bw(ignore)]
     #[br(args(size, args.inner), seek_before = SeekFrom::Start(args.header_start + offset as u64), restore_position)]
@@ -254,6 +300,12 @@ where
         }
         assert_eq!(reader.stream_position()?, end);
         Ok(Self(syms))
+    }
+}
+
+impl<T: BinSize> BinSize for MaxSize<T> {
+    fn bin_size(&self) -> usize {
+        self.0.iter().map(|d| d.bin_size()).sum()
     }
 }
 
@@ -357,7 +409,7 @@ impl<T: BinWrite> BinWrite for OffsetTable<T> {
         endian: binrw::Endian,
         args: Self::Args<'_>,
     ) -> BinResult<()> {
-        writer.write_type(&args.offset, endian)?;
+        writer.write_type(&(args.offset as u32), endian)?;
         writer.write_type(&(self.data.len() as u32), endian)?;
         //writer.write_type_args(&self.data, endian, args.inner)?;
         Ok(())
