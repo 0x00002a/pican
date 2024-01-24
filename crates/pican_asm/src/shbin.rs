@@ -10,6 +10,7 @@ use binrw::{
     VecArgs,
 };
 use pican_core::{
+    ops::OpCode,
     properties::OutputProperty,
     register::{Register, RegisterKind, RegisterType},
 };
@@ -19,29 +20,86 @@ use super::float24::Float24;
 #[binrw]
 #[doc(alias = "DVLB")]
 #[brw(magic = b"DVLB")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Shbin {
     pub dvle_count: u32,
     #[br(count = dvle_count)]
     pub dvle_offsets: Vec<u32>,
     pub dvlp: Dvlp,
     #[br(parse_with = binrw::file_ptr::parse_from_iter(dvle_offsets.iter().copied()), seek_before(SeekFrom::Start(0)))]
+    #[bw(align_after = 0x4)]
     pub dvles: Vec<ExecutableSection>,
 }
 
-#[binrw]
-#[brw(magic = b"DVLP")]
-#[derive(Clone, Debug)]
+#[binread]
+#[br(magic = b"DVLP", stream = s)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Dvlp {
+    #[br(try_calc = s.stream_position().map(|p| p - 0x4))]
+    start: u64,
     #[br(temp)]
     #[bw(calc = 4098)]
     mversion: u32,
-    pub data: [u32; 9],
+    #[br(args { header_start: start, inner: () })]
+    pub compiled_blob: SizedTable<u8>,
+    #[br(args { header_start: start, inner: () })]
+    pub operand_desc_table: OffsetTable<u8>,
+    pub rest: [u32; 4],
+}
+
+impl BinWrite for Dvlp {
+    type Args<'a> = ();
+
+    fn write_options<W: std::io::prelude::Write + Seek>(
+        &self,
+        writer: &mut W,
+        endian: binrw::Endian,
+        args: Self::Args<'_>,
+    ) -> BinResult<()> {
+        writer.write_type(&b"DVLP", endian)?;
+        writer.write_type(&0u16, endian)?; // version
+        writer.write_type_args(
+            &self.compiled_blob,
+            endian,
+            OffsetTableWriteArgs { offset: 0x48 },
+        )?;
+        let shader_size = self
+            .compiled_blob
+            .data
+            .0
+            .iter()
+            .map(|s| s.bin_size())
+            .sum::<usize>() as u64;
+        writer.write_type_args(
+            &self.operand_desc_table,
+            endian,
+            OffsetTableWriteArgs {
+                offset: 0x48 + shader_size,
+            },
+        )?;
+
+        writer.write_type(&self.rest, endian)?;
+
+        writer.write_type(&self.compiled_blob.data.0, endian)?;
+        writer.write_type(&self.operand_desc_table.data, endian)?;
+
+        Ok(())
+    }
+}
+
+impl BinSize for u8 {
+    fn bin_size(&self) -> usize {
+        1
+    }
+}
+
+pub struct Operation {
+    pub opcode: OpCode,
 }
 
 #[binrw]
 #[doc(alias = "DVLE")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[brw(magic = b"DVLE")]
 pub struct ExecutableSectionHeader {
     pub mversion: u16,
@@ -69,7 +127,7 @@ pub struct ExecutableSectionHeader {
 
 #[binread]
 #[br(stream = s)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExecutableSection {
     #[br(try_calc = s.stream_position(), dbg)]
     header_start: u64,
@@ -135,7 +193,7 @@ impl BinWrite for ExecutableSection {
         writer.write_type(&self.label_table.data, endian)?;
         writer.write_type(&self.output_register_table.data, endian)?;
         writer.write_type(&self.uniform_table.data, endian)?;
-        writer.write_type(&self.symbol_table.0, endian)?;
+        writer.write_type(&self.symbol_table.data.0, endian)?;
 
         Ok(())
     }
@@ -155,9 +213,53 @@ impl<T: BinSize> OffsetTable<T> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct SizedTable<T>(pub Vec<T>);
+#[binrw]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[bw(import_raw(args: OffsetTableWriteArgs))]
+#[br(import_raw(args: OffsetTableArgs<<T as BinRead>::Args<'_>>))]
+pub struct SizedTable<T>
+where
+    T: BinRead + BinWrite + BinSize,
+    for<'a> <T as BinRead>::Args<'a>: Clone,
+{
+    #[bw(ignore)]
+    #[br(temp)]
+    offset: u32,
+    #[br(temp)]
+    #[bw(calc = data.0.iter().map(|d| d.bin_size()).sum::<usize>() as u32)]
+    size: u32,
+    #[bw(ignore)]
+    #[br(args(size, args.inner), seek_before = SeekFrom::Start(args.header_start + offset as u64), restore_position)]
+    pub data: MaxSize<T>,
+}
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MaxSize<T>(pub Vec<T>);
+
+impl<T: BinRead> BinRead for MaxSize<T>
+where
+    for<'a> T::Args<'a>: Clone,
+{
+    type Args<'a> = (u32, T::Args<'a>);
+
+    fn read_options<R: std::io::prelude::Read + Seek>(
+        reader: &mut R,
+        endian: binrw::Endian,
+        args: Self::Args<'_>,
+    ) -> BinResult<Self> {
+        let to = reader.stream_position()?;
+        let end = to + args.0 as u64;
+        let mut syms = Vec::new();
+        while reader.stream_position()? < end {
+            let string = T::read_options(reader, endian, args.1.clone())?;
+            syms.push(string);
+        }
+        assert_eq!(reader.stream_position()?, end);
+        Ok(Self(syms))
+    }
+}
+
+/*
 impl<T: BinRead + 'static> BinRead for SizedTable<T>
 where
     for<'a> T::Args<'a>: Clone,
@@ -171,6 +273,7 @@ where
     ) -> BinResult<Self> {
         let offset: u32 = reader.read_type(endian)?;
         let size: u32 = reader.read_type(endian)?;
+        println!("offset: {offset}, sz: {size}");
         let pos = reader.stream_position()?;
         let to = args.header_start + offset as u64;
         reader.seek(SeekFrom::Start(to))?;
@@ -200,7 +303,7 @@ impl<T: BinWrite + BinSize> BinWrite for SizedTable<T> {
         writer.write_type(&size, endian)?;
         Ok(())
     }
-}
+}*/
 
 #[derive(NamedArgs)]
 pub struct OffsetTableArgs<Inner> {
@@ -213,7 +316,7 @@ pub struct OffsetTableWriteArgs {
     offset: u64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OffsetTable<T> {
     pub data: Vec<T>,
 }
@@ -271,7 +374,7 @@ impl IntoSeekFrom for ExeSectionOffset {
     }
 }
 #[binrw]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LabelTableEntry {
     #[brw(pad_after = 2)]
     pub id: u16,
@@ -286,7 +389,7 @@ impl BinSize for LabelTableEntry {
 }
 
 #[binrw]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConstantTableEntry {
     #[brw(magic = 0u8)]
     Bool { register_id: u8, value: u8 },
@@ -314,7 +417,7 @@ impl BinSize for ConstantTableEntry {
 }
 
 #[binrw]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OutputRegisterEntry {
     #[brw(pad_after = 1)]
     pub ty: OutputProperty,
@@ -330,11 +433,11 @@ impl BinSize for OutputRegisterEntry {
 }
 
 #[binrw]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SwizzleMask(u16);
 
 #[binrw]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RegisterIndex(
     #[bw(map = Self::register_to_index)]
     #[br(try_map = Self::index_to_register)]
@@ -369,7 +472,7 @@ impl RegisterIndex {
 }
 
 #[binrw]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UniformTableEntry {
     pub symbol_offset: u32,
     pub start_register: RegisterIndex,
@@ -382,7 +485,7 @@ impl BinSize for UniformTableEntry {
 }
 
 #[binrw]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConstantType {
     #[brw(magic = 0u8)]
     Bool,
@@ -394,7 +497,7 @@ pub enum ConstantType {
 
 #[binrw]
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShaderType {
     #[brw(magic = 0u8)]
     Vertex,
@@ -414,9 +517,12 @@ mod tests {
     fn try_example() {
         let input = include_bytes!("./example.shbin");
         let shbin: Shbin = Cursor::new(input).read_le().unwrap();
+        println!("{shbin:#?}");
         let mut w = Cursor::new(Vec::new());
         shbin.write_le(&mut w).unwrap();
-        println!("{shbin:#?}");
-        assert_eq!(w.into_inner(), input);
+        let inner = w.into_inner();
+        let shbinroundtrip: Shbin = Cursor::new(&inner).read_le().unwrap();
+        assert_eq!(shbin, shbinroundtrip);
+        pretty_assertions::assert_eq!(inner, input);
     }
 }
