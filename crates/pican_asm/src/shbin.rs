@@ -33,6 +33,9 @@ pub struct Shbin {
 #[brw(magic = b"DVLP")]
 #[derive(Clone, Debug)]
 pub struct Dvlp {
+    #[br(temp)]
+    #[bw(calc = 4098)]
+    mversion: u32,
     pub data: [u32; 9],
 }
 
@@ -81,7 +84,7 @@ pub struct ExecutableSection {
     #[br(args { header_start, inner: () })]
     pub uniform_table: OffsetTable<UniformTableEntry>,
     #[br(args { header_start, inner: () })]
-    pub symbol_table: StringTable,
+    pub symbol_table: SizedTable<NullString>,
 }
 impl BinWrite for ExecutableSection {
     type Args<'a> = ();
@@ -138,19 +141,28 @@ impl BinWrite for ExecutableSection {
     }
 }
 pub trait BinSize {
-    fn bin_size() -> usize;
+    fn bin_size(&self) -> usize;
 }
+impl BinSize for NullString {
+    fn bin_size(&self) -> usize {
+        self.0.len()
+    }
+}
+
 impl<T: BinSize> OffsetTable<T> {
     fn add_offset(&self) -> usize {
-        self.data.len() * T::bin_size()
+        self.data.iter().map(|d| d.bin_size()).sum()
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct StringTable(pub Vec<NullString>);
+pub struct SizedTable<T>(pub Vec<T>);
 
-impl BinRead for StringTable {
-    type Args<'a> = OffsetTableArgs<()>;
+impl<T: BinRead + 'static> BinRead for SizedTable<T>
+where
+    for<'a> T::Args<'a>: Clone,
+{
+    type Args<'a> = OffsetTableArgs<T::Args<'a>>;
 
     fn read_options<R: std::io::prelude::Read + Seek>(
         reader: &mut R,
@@ -165,7 +177,7 @@ impl BinRead for StringTable {
         let mut syms = Vec::new();
         let end = to + size as u64;
         while reader.stream_position()? < end {
-            let string = NullString::read_options(reader, endian, ())?;
+            let string = T::read_options(reader, endian, args.inner.clone())?;
             syms.push(string);
         }
         assert_eq!(reader.stream_position()?, end);
@@ -174,7 +186,7 @@ impl BinRead for StringTable {
         Ok(Self(syms))
     }
 }
-impl BinWrite for StringTable {
+impl<T: BinWrite + BinSize> BinWrite for SizedTable<T> {
     type Args<'a> = OffsetTableWriteArgs;
 
     fn write_options<W: std::io::prelude::Write + Seek>(
@@ -184,7 +196,7 @@ impl BinWrite for StringTable {
         args: Self::Args<'_>,
     ) -> BinResult<()> {
         writer.write_type(&args.offset, endian)?;
-        let size = self.0.iter().map(|s| s.0.len()).sum::<usize>() as u32;
+        let size = self.0.iter().map(|s| s.bin_size()).sum::<usize>() as u32;
         writer.write_type(&size, endian)?;
         Ok(())
     }
@@ -268,7 +280,7 @@ pub struct LabelTableEntry {
     pub symbol_offset: u32,
 }
 impl BinSize for LabelTableEntry {
-    fn bin_size() -> usize {
+    fn bin_size(&self) -> usize {
         0x10
     }
 }
@@ -296,7 +308,7 @@ pub enum ConstantTableEntry {
     },
 }
 impl BinSize for ConstantTableEntry {
-    fn bin_size() -> usize {
+    fn bin_size(&self) -> usize {
         0x14
     }
 }
@@ -312,7 +324,7 @@ pub struct OutputRegisterEntry {
 }
 
 impl BinSize for OutputRegisterEntry {
-    fn bin_size() -> usize {
+    fn bin_size(&self) -> usize {
         0x8
     }
 }
@@ -364,7 +376,7 @@ pub struct UniformTableEntry {
     pub end_register: RegisterIndex,
 }
 impl BinSize for UniformTableEntry {
-    fn bin_size() -> usize {
+    fn bin_size(&self) -> usize {
         0x8
     }
 }
@@ -404,7 +416,7 @@ mod tests {
         let shbin: Shbin = Cursor::new(input).read_le().unwrap();
         let mut w = Cursor::new(Vec::new());
         shbin.write_le(&mut w).unwrap();
+        println!("{shbin:#?}");
         assert_eq!(w.into_inner(), input);
-        panic!("{shbin:#?}");
     }
 }
