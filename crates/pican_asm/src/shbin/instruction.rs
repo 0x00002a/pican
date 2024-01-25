@@ -85,9 +85,9 @@ pub struct OperandSource {
     selector: ComponentSelector,
 }
 
-#[bitfield]
+#[bitfield(bytes = 4)]
 #[binrw]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[br(map(Self::from_bytes))]
 #[bw(map(|x: &Self| x.into_bytes()))]
 pub struct OperandDescriptor {
@@ -206,7 +206,7 @@ pub struct InstructionFormat5I {
     opc: B3,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Instruction {
     pub opcode: OpCode,
     pub operands: Operands,
@@ -294,7 +294,7 @@ impl Instruction {
             Operands::Cmp { .. } => todo!(),
             Operands::SetEmit { .. } => todo!(),
             Operands::Conditional { .. } => todo!(),
-            Operands::Zero => todo!(),
+            Operands::Zero => "".to_owned(),
             Operands::Unknown => todo!(),
         };
         format!("{} {}", self.opcode, operands)
@@ -439,7 +439,7 @@ impl InstructionFormat {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operands {
     /// (dst, src1, src2, desc)
     TwoArguments {
