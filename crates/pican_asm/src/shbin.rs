@@ -251,7 +251,7 @@ pub trait BinSize {
 }
 impl BinSize for NullString {
     fn bin_size(&self) -> usize {
-        self.0.len()
+        self.0.len() + 1
     }
 }
 
