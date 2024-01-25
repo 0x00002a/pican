@@ -1,5 +1,10 @@
+use std::io::Write;
+
 use binrw::binrw;
 use modular_bitfield::prelude::*;
+use pican_core::ops::OpCode;
+use strum::EnumDiscriminants;
+use typesum::sumtype;
 
 #[bitfield(filled = false)]
 #[derive(Debug, BitfieldSpecifier)]
@@ -201,88 +206,10 @@ pub struct InstructionFormat5I {
     opc: B3,
 }
 
-#[derive(Debug)]
-pub enum Instruction {
-    /// (dst, src1, src2, desc)
-    Add(u8, u8, u8, u8),
-    Dp3(u8, u8, u8, u8),
-    Dp4(u8, u8, u8, u8),
-    Dph(u8, u8, u8, u8),
-    Dst(u8, u8, u8, u8),
-
-    /// (dst, src1, desc)
-    Ex2(u8, u8, u8),
-    Lg2(u8, u8, u8),
-    Litp(u8, u8, u8),
-
-    /// (dst, src1, src2, desc)
-    Mul(u8, u8, u8, u8),
-    Sge(u8, u8, u8, u8),
-    Slt(u8, u8, u8, u8),
-
-    /// (dst, src1, desc)
-    Flr(u8, u8, u8),
-
-    /// (dst, src1, src2, desc)
-    Max(u8, u8, u8, u8),
-    Min(u8, u8, u8, u8),
-
-    /// (dst, src1, desc)
-    Rcp(u8, u8, u8),
-    Rsq(u8, u8, u8),
-
-    Mova(u8, u8, u8),
-    Mov(u8, u8, u8),
-
-    /// (dst, src1, src2, desc)
-    Dphi(u8, u8, u8, u8),
-    Dsti(u8, u8, u8, u8),
-    Sgei(u8, u8, u8, u8),
-    Slti(u8, u8, u8, u8),
-
-    /// ()
-    Break,
-    Nop,
-    End,
-
-    /// (cond, dst, num)
-    Breakc(u8, u16, u8),
-    Call(u8, u16, u8),
-    Callc(u8, u16, u8),
-
-    /// (dst, num)
-    Callu(u16, u8),
-    Ifu(u16, u8),
-
-    /// (cond, dst, num)
-    Ifc(u8, u16, u8),
-
-    /// (dst, num)
-    Loop(u16, u8),
-
-    /// ()
-    Emit,
-
-    /// (vtxid, winding, primemit)
-    Setemit(u8, u8, u8),
-
-    /// (cond, dst, num)
-    Jmpc(u8, u16, u8),
-
-    /// (dst, num)
-    Jmpu(u16, u8),
-
-    /// (src1, src2)
-    Cmp(u8, u8),
-
-    /// (dst, src1, src2, src3)
-    Madi(u8, u8, u8, u8),
-
-    /// (dst, src1, src2, src3, desc)
-    Mad(u8, u8, u8, u8, u8),
-
-    /// (opc)
-    Unknown(u8),
+#[derive(Debug, Clone, Copy)]
+pub struct Instruction {
+    pub opcode: OpCode,
+    pub operands: Operands,
 }
 
 impl Instruction {
@@ -304,130 +231,255 @@ impl Instruction {
     }
 
     pub fn to_asm(&self, operands: &[OperandDescriptor]) -> String {
-        match self {
-            Self::Add(dst, src1, src2, desc)
-            | Self::Dp3(dst, src1, src2, desc)
-            | Self::Dp4(dst, src1, src2, desc)
-            | Self::Dph(dst, src1, src2, desc)
-            | Self::Dst(dst, src1, src2, desc)
-            | Self::Mul(dst, src1, src2, desc)
-            | Self::Sge(dst, src1, src2, desc)
-            | Self::Slt(dst, src1, src2, desc)
-            | Self::Max(dst, src1, src2, desc)
-            | Self::Min(dst, src1, src2, desc) => {
-                let pattern = &operands[*desc as usize];
+        let operands = match self.operands {
+            Operands::TwoArguments {
+                dst,
+                src1,
+                src2,
+                desc,
+                ..
+            } => {
+                let pattern = &operands[desc as usize];
                 println!("desc: {desc:02X}, {pattern:?}");
                 format!(
-                    "{} {}{}, {}{}{}, {}{}{}",
-                    match self {
-                        Self::Add(_, _, _, _) => "add",
-                        Self::Dp3(_, _, _, _) => "dp3",
-                        Self::Dp4(_, _, _, _) => "dp4",
-                        Self::Dph(_, _, _, _) => "dph",
-                        Self::Dst(_, _, _, _) => "dst",
-                        Self::Mul(_, _, _, _) => "mul",
-                        Self::Sge(_, _, _, _) => "sge",
-                        Self::Slt(_, _, _, _) => "slt",
-                        Self::Max(_, _, _, _) => "max",
-                        Self::Min(_, _, _, _) => "min",
-                        _ => unreachable!(),
-                    },
-                    Self::dst_to_register(*dst),
+                    "{}{}, {}{}{}, {}{}{}",
+                    Self::dst_to_register(dst),
                     pattern.destination_mask(),
                     if pattern.s1().negate() { "-" } else { "" },
-                    Self::src_to_register(*src1),
+                    Self::src_to_register(src1),
                     pattern.s1().selector(),
                     if pattern.s2().negate() { "-" } else { "" },
-                    Self::src_to_register(*src2),
+                    Self::src_to_register(src2),
                     pattern.s2().selector(),
                 )
             }
-
-            Self::Ex2(dst, src1, desc)
-            | Self::Lg2(dst, src1, desc)
-            | Self::Litp(dst, src1, desc)
-            | Self::Flr(dst, src1, desc)
-            | Self::Rcp(dst, src1, desc)
-            | Self::Rsq(dst, src1, desc)
-            | Self::Mova(dst, src1, desc)
-            | Self::Mov(dst, src1, desc) => {
-                let pattern = &operands[*desc as usize];
+            Operands::OneArgument { dst, src1, desc } => {
+                let pattern = &operands[desc as usize];
                 println!("desc: {desc:02X}, {pattern:?}");
                 format!(
-                    "{} {}{}, {}{}{}",
-                    match self {
-                        Self::Ex2(_, _, _) => "ex2",
-                        Self::Lg2(_, _, _) => "lg2",
-                        Self::Litp(_, _, _) => "litp",
-                        Self::Flr(_, _, _) => "flr",
-                        Self::Rcp(_, _, _) => "rcp",
-                        Self::Rsq(_, _, _) => "rsq",
-                        Self::Mova(_, _, _) => "mova",
-                        Self::Mov(_, _, _) => "mov",
-                        _ => unreachable!(),
-                    },
-                    Self::dst_to_register(*dst),
+                    "{}{}, {}{}{}",
+                    Self::dst_to_register(dst),
                     pattern.destination_mask(),
                     if pattern.s1().negate() { "-" } else { "" },
-                    Self::src_to_register(*src1),
+                    Self::src_to_register(src1),
                     pattern.s1().selector(),
                 )
             }
 
-            Self::Dphi(_, _, _, _) => todo!(),
-            Self::Dsti(_, _, _, _) => todo!(),
-            Self::Sgei(_, _, _, _) => todo!(),
-            Self::Slti(_, _, _, _) => todo!(),
-
-            Self::Break => "break".into(),
-            Self::Nop => "nop".into(),
-            Self::End => "end".into(),
-
-            Self::Breakc(_, _, _) => todo!(),
-            Self::Call(_, _, _) => todo!(),
-            Self::Callc(_, _, _) => todo!(),
-
-            Self::Callu(_, _) => todo!(),
-            Self::Ifu(_, _) => todo!(),
-
-            Self::Ifc(_, _, _) => todo!(),
-
-            Self::Loop(_, _) => todo!(),
-
-            Self::Emit => "emit".into(),
-
-            Self::Setemit(_, _, _) => todo!(),
-
-            Self::Jmpc(_, _, _) => todo!(),
-
-            Self::Jmpu(_, _) => todo!(),
-
-            Self::Cmp(_, _) => todo!(),
-
-            Self::Madi(_, _, _, _) => todo!(),
-
-            Self::Mad(dst, src1, src2, src3, desc) => {
-                let pattern = &operands[*desc as usize];
+            Operands::Mad {
+                dst,
+                src1,
+                src2,
+                src3,
+                desc: Some(desc),
+            } => {
+                let pattern = &operands[desc as usize];
                 println!("desc: {desc:02X}, {pattern:?}");
                 format!(
-                    "mad {}{}, {}{}{}, {}{}{}, {}{}{}",
-                    Self::dst_to_register(*dst),
+                    "{}{}, {}{}{}, {}{}{}, {}{}{}",
+                    Self::dst_to_register(dst),
                     pattern.destination_mask(),
                     if pattern.s1().negate() { "-" } else { "" },
-                    Self::src_to_register(*src1),
+                    Self::src_to_register(src1),
                     pattern.s1().selector(),
                     if pattern.s2().negate() { "-" } else { "" },
-                    Self::src_to_register(*src2),
+                    Self::src_to_register(src2),
                     pattern.s2().selector(),
                     if pattern.s3().negate() { "-" } else { "" },
-                    Self::src_to_register(*src3),
+                    Self::src_to_register(src3),
                     pattern.s3().selector(),
                 )
             }
+            Operands::Mad { desc: None, .. } => todo!(),
+            Operands::Cmp { .. } => todo!(),
+            Operands::SetEmit { .. } => todo!(),
+            Operands::Conditional { .. } => todo!(),
+            Operands::Zero => todo!(),
+            Operands::Unknown => todo!(),
+        };
+        format!("{} {}", self.opcode, operands)
+    }
+}
 
-            Self::Unknown(_) => todo!(),
+pub const FORMAT_TABLE: &[(InstructionFormatKind, OpCode)] = &[
+    (InstructionFormatKind::One, OpCode::Add),
+    (InstructionFormatKind::One, OpCode::Dp3),
+    (InstructionFormatKind::One, OpCode::Dp4),
+    (InstructionFormatKind::One, OpCode::Dph),
+    (InstructionFormatKind::One, OpCode::Dst),
+    (InstructionFormatKind::OneU, OpCode::Ex2),
+    (InstructionFormatKind::OneU, OpCode::Lg2),
+    (InstructionFormatKind::OneU, OpCode::LitP),
+    (InstructionFormatKind::One, OpCode::Mul),
+    (InstructionFormatKind::One, OpCode::Sge),
+    (InstructionFormatKind::One, OpCode::Slt),
+    (InstructionFormatKind::OneU, OpCode::Flr),
+    (InstructionFormatKind::One, OpCode::Max),
+    (InstructionFormatKind::One, OpCode::Min),
+    (InstructionFormatKind::OneU, OpCode::Rcp),
+    (InstructionFormatKind::OneU, OpCode::Rsq),
+    (InstructionFormatKind::OneU, OpCode::MovA),
+    (InstructionFormatKind::OneU, OpCode::Mov),
+    (InstructionFormatKind::OneI, OpCode::DphI),
+    (InstructionFormatKind::OneI, OpCode::DstI),
+    (InstructionFormatKind::OneI, OpCode::SgeI),
+    (InstructionFormatKind::OneI, OpCode::SltI),
+    (InstructionFormatKind::Zero, OpCode::Break),
+    (InstructionFormatKind::Zero, OpCode::Nop),
+    (InstructionFormatKind::Zero, OpCode::End),
+    (InstructionFormatKind::Two, OpCode::BreakC),
+    (InstructionFormatKind::Two, OpCode::Call),
+    (InstructionFormatKind::Two, OpCode::CallC),
+    (InstructionFormatKind::Three, OpCode::CallU),
+    (InstructionFormatKind::Three, OpCode::IfU),
+    (InstructionFormatKind::Two, OpCode::IfC),
+    (InstructionFormatKind::Three, OpCode::Loop),
+    (InstructionFormatKind::Zero, OpCode::Emit),
+    (InstructionFormatKind::Four, OpCode::SetEmit),
+    (InstructionFormatKind::Two, OpCode::JmpC),
+    (InstructionFormatKind::Three, OpCode::JmpU),
+    (InstructionFormatKind::OneC, OpCode::Cmp),
+    (InstructionFormatKind::FiveI, OpCode::MadI),
+    (InstructionFormatKind::Five, OpCode::Mad),
+    (InstructionFormatKind::Unknown, OpCode::Unknown),
+];
+
+#[derive(EnumDiscriminants)]
+#[strum_discriminants(name(InstructionFormatKind))]
+#[sumtype(only = from, is)]
+pub enum InstructionFormat {
+    One(InstructionFormat1),
+    OneI(InstructionFormat1I),
+    OneU(InstructionFormat1U),
+    OneC(InstructionFormat1C),
+    Two(InstructionFormat2),
+    Three(InstructionFormat3),
+    Four(InstructionFormat4),
+    Five(InstructionFormat5),
+    FiveI(InstructionFormat5I),
+    #[sumtype(only = is)]
+    Zero,
+    #[sumtype(only = is)]
+    Unknown,
+}
+
+impl InstructionFormat {
+    pub fn from_bytes(kind: InstructionFormatKind, bytes: [u8; 4]) -> Self {
+        match kind {
+            InstructionFormatKind::One => InstructionFormat1::from_bytes(bytes).into(),
+            InstructionFormatKind::OneI => InstructionFormat1I::from_bytes(bytes).into(),
+            InstructionFormatKind::OneU => InstructionFormat1U::from_bytes(bytes).into(),
+            InstructionFormatKind::OneC => InstructionFormat1C::from_bytes(bytes).into(),
+            InstructionFormatKind::Two => InstructionFormat2::from_bytes(bytes).into(),
+            InstructionFormatKind::Three => InstructionFormat3::from_bytes(bytes).into(),
+            InstructionFormatKind::Four => InstructionFormat4::from_bytes(bytes).into(),
+            InstructionFormatKind::Five => InstructionFormat5::from_bytes(bytes).into(),
+            InstructionFormatKind::FiveI => InstructionFormat5I::from_bytes(bytes).into(),
+            InstructionFormatKind::Zero => InstructionFormat::Zero,
+            InstructionFormatKind::Unknown => InstructionFormat::Unknown,
         }
     }
+    pub fn to_operands(self) -> Operands {
+        match self {
+            InstructionFormat::One(o) => Operands::TwoArguments {
+                dst: o.dst(),
+                src1: o.src1(),
+                src2: o.src2(),
+                desc: o.desc(),
+                inverse: false,
+            },
+            InstructionFormat::OneI(o) => Operands::TwoArguments {
+                dst: o.dst(),
+                src1: o.src1(),
+                src2: o.src2(),
+                desc: o.desc(),
+                inverse: true,
+            },
+            InstructionFormat::OneU(o) => Operands::OneArgument {
+                dst: o.dst(),
+                src1: o.src1(),
+                desc: o.desc(),
+            },
+            InstructionFormat::OneC(o) => Operands::Cmp {
+                src1: o.src1(),
+                src2: o.src2(),
+            },
+            InstructionFormat::Two(o) => Operands::Conditional {
+                cond: Some(o.condop()),
+                dst: o.dst(),
+                num: o.num(),
+            },
+            InstructionFormat::Three(o) => Operands::Conditional {
+                cond: None,
+                dst: o.dst(),
+                num: o.num(),
+            },
+            InstructionFormat::Four(o) => Operands::SetEmit {
+                vtxid: o.vtxid(),
+                winding: o.winding(),
+                primemit: o.primemit(),
+            },
+            InstructionFormat::Five(o) => Operands::Mad {
+                dst: o.dst(),
+                src1: o.src1(),
+                src2: o.src2(),
+                src3: o.src3(),
+                desc: Some(o.desc()),
+            },
+            InstructionFormat::FiveI(o) => Operands::Mad {
+                dst: o.dst(),
+                src1: o.src1(),
+                src2: o.src2(),
+                src3: o.src3(),
+                desc: None,
+            },
+            InstructionFormat::Zero => Operands::Zero,
+            InstructionFormat::Unknown => Operands::Unknown,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Operands {
+    /// (dst, src1, src2, desc)
+    TwoArguments {
+        dst: u8,
+        src1: u8,
+        src2: u8,
+        desc: u8,
+        /// Whether it's the special form that has narrow src2 (uses 1I encoding instead)
+        inverse: bool,
+    },
+
+    /// (dst, src1, desc)
+    OneArgument {
+        dst: u8,
+        src1: u8,
+        desc: u8,
+    },
+    Cmp {
+        src1: u8,
+        src2: u8,
+    },
+    SetEmit {
+        vtxid: u8,
+        winding: u8,
+        primemit: u8,
+    },
+    Conditional {
+        cond: Option<u8>,
+        dst: u16,
+        num: u8,
+    },
+    Mad {
+        dst: u8,
+        src1: u8,
+        src2: u8,
+        src3: u8,
+        desc: Option<u8>,
+    },
+    Zero,
+    Unknown,
 }
 
 pub fn disassemble_blob(blob: &[u32]) -> Vec<Instruction> {
@@ -435,120 +487,15 @@ pub fn disassemble_blob(blob: &[u32]) -> Vec<Instruction> {
 
     for &instr in blob {
         let bytes = instr.to_le_bytes();
-        let opcode = (instr >> 0x1A) as u8;
-        rv.push(match opcode {
-            0x00..=0x04 | 0x08..=0x0A | 0x0C | 0x0D => {
-                let instr = InstructionFormat1::from_bytes(bytes);
-                println!("{:?}", instr);
-                (match instr.opc() {
-                    0x00 => Instruction::Add,
-                    0x01 => Instruction::Dp3,
-                    0x02 => Instruction::Dp4,
-                    0x03 => Instruction::Dph,
-                    0x04 => Instruction::Dst,
-
-                    0x08 => Instruction::Mul,
-                    0x09 => Instruction::Sge,
-                    0x0A => Instruction::Slt,
-
-                    0x0C => Instruction::Max,
-                    0x0D => Instruction::Min,
-
-                    _ => unreachable!(),
-                })(instr.dst(), instr.src1(), instr.src2(), instr.desc())
-            }
-            0x05..=0x07 | 0x0B | 0x0E | 0x0F | 0x12 | 0x13 => {
-                let instr = InstructionFormat1U::from_bytes(bytes);
-                println!("{:?}", instr);
-                (match instr.opc() {
-                    0x05 => Instruction::Ex2,
-                    0x06 => Instruction::Lg2,
-                    0x07 => Instruction::Litp,
-
-                    0x0B => Instruction::Flr,
-
-                    0x0E => Instruction::Rcp,
-                    0x0F => Instruction::Rsq,
-
-                    0x12 => Instruction::Mova,
-                    0x13 => Instruction::Mov,
-
-                    _ => unreachable!(),
-                })(instr.dst(), instr.src1(), instr.desc())
-            }
-            0x18..=0x1B => {
-                let instr = InstructionFormat1I::from_bytes(bytes);
-                println!("{:?}", instr);
-                (match instr.opc() {
-                    0x18 => Instruction::Dphi,
-                    0x19 => Instruction::Dsti,
-                    0x1A => Instruction::Sgei,
-                    0x1B => Instruction::Slti,
-
-                    _ => unreachable!(),
-                })(instr.dst(), instr.src1(), instr.src2(), instr.desc())
-            }
-            0x20 => Instruction::Break,
-            0x21 => Instruction::Nop,
-            0x22 => Instruction::End,
-            0x23..=0x25 | 0x28 | 0x2C => {
-                let instr = InstructionFormat2::from_bytes(bytes);
-                println!("{:?}", instr);
-                (match instr.opc() {
-                    0x23 => Instruction::Breakc,
-                    0x24 => Instruction::Call,
-                    0x25 => Instruction::Callc,
-
-                    0x28 => Instruction::Ifc,
-
-                    0x2C => Instruction::Jmpc,
-
-                    _ => unreachable!(),
-                })(instr.condop(), instr.dst(), instr.num())
-            }
-            0x26 | 0x27 | 0x29 | 0x2D => {
-                let instr = InstructionFormat3::from_bytes(bytes);
-                println!("{:?}", instr);
-                (match instr.opc() {
-                    0x26 => Instruction::Callu,
-                    0x27 => Instruction::Ifu,
-                    0x29 => Instruction::Loop,
-
-                    0x2D => Instruction::Jmpu,
-
-                    _ => unreachable!(),
-                })(instr.dst(), instr.num())
-            }
-            0x2A => Instruction::Emit,
-            0x2B => {
-                let instr = InstructionFormat4::from_bytes(bytes);
-                println!("{:?}", instr);
-                Instruction::Setemit(instr.vtxid(), instr.winding(), instr.primemit())
-            }
-            0x2E | 0x2F => {
-                let instr = InstructionFormat1C::from_bytes(bytes);
-                println!("{:?}", instr);
-                Instruction::Cmp(instr.src1(), instr.src2())
-            }
-            0x38..=0x3F => {
-                let instr = InstructionFormat5::from_bytes(bytes);
-                println!("{:?}", instr);
-                Instruction::Mad(
-                    instr.dst(),
-                    instr.src1(),
-                    instr.src2(),
-                    instr.src3(),
-                    instr.desc(),
-                )
-            }
-            0x30..=0x37 => {
-                let instr = InstructionFormat5I::from_bytes(bytes);
-                println!("{:?}", instr);
-                Instruction::Madi(instr.dst(), instr.src1(), instr.src2(), instr.src3())
-            }
-            0x10 | 0x11 | 0x14..=0x17 | 0x1C..=0x1F => Instruction::Unknown(opcode),
-            _ => unreachable!(),
-        })
+        let opcode_b = (instr >> 0x1A) as u8;
+        assert!(
+            opcode_b <= OpCode::maximum_value(),
+            "opcode is invalid {opcode_b}"
+        );
+        let opcode = OpCode::binary_to_op(opcode_b);
+        let format = FORMAT_TABLE.iter().find(|(k, o)| *o == opcode).unwrap().0;
+        let operands = InstructionFormat::from_bytes(format, bytes).to_operands();
+        rv.push(Instruction { opcode, operands });
     }
 
     rv

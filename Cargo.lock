@@ -321,6 +321,7 @@ dependencies = [
  "pican_pir",
  "pretty_assertions",
  "serde",
+ "strum",
  "typesum",
 ]
 
