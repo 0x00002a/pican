@@ -15,6 +15,8 @@ use pican_core::{
 
 use super::float24::Float24;
 
+pub mod instruction;
+
 #[binread]
 #[doc(alias = "DVLB")]
 #[br(magic = b"DVLB", stream = s)]
