@@ -17,13 +17,14 @@ use super::float24::Float24;
 
 #[binread]
 #[doc(alias = "DVLB")]
-#[br(magic = b"DVLB")]
+#[br(magic = b"DVLB", stream = s)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Shbin {
     #[br(temp)]
     pub dvle_count: u32,
     #[br(count = dvle_count, dbg)]
     pub dvle_offsets: Vec<u32>,
+    #[br(args(s.stream_position().unwrap()))]
     pub dvlp: Dvlp,
     #[br(parse_with = binrw::file_ptr::parse_from_iter(dvle_offsets.iter().copied()), seek_before(SeekFrom::Start(0)))]
     pub dvles: Vec<ExecutableSection>,
@@ -40,7 +41,7 @@ impl BinWrite for Shbin {
         let p = writer.stream_position()?;
 
         let mut dvlp_buf = Cursor::new(Vec::new());
-        dvlp_buf.write_type(&self.dvlp, endian)?;
+        dvlp_buf.write_type_args(&self.dvlp, endian, (0u64,))?;
 
         writer.write_type(b"DVLB", endian)?;
 
@@ -50,6 +51,7 @@ impl BinWrite for Shbin {
         let mut off = (writer.stream_position()? - p)
             + dvle_count as u64 * size_of::<u32>() as u64
             + dvlp_buf.get_ref().len() as u64;
+        println!("dvlp:\n{:?}", dvlp_buf.get_ref());
 
         for dvle in &self.dvles {
             let before = dvlp_buf.stream_position()?;
@@ -67,28 +69,30 @@ impl BinWrite for Shbin {
 }
 
 #[binrw]
-#[brw(magic = b"DVLP", stream = s)]
+#[brw(magic = b"DVLP", stream = s, import(start: u64))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Dvlp {
-    #[br(try_calc = s.stream_position().map(|p| p - 0x4))]
-    #[bw(ignore)]
-    start: u64,
-    #[br(temp)]
-    #[bw(calc = 0)]
     _mversion: u32,
     #[br(args { header_start: start, inner: () }, dbg)]
     #[bw(args { offset: 40 })]
-    pub compiled_blob: SizedTable<u8>,
+    pub compiled_blob: WordTable,
     #[br(args { header_start: start, inner: () }, dbg)]
     #[bw(args { offset: (compiled_blob.data.bin_size() * 4) as u64 + 40 })]
-    pub operand_desc_table: OffsetTable<u8>,
+    pub operand_desc_table: OffsetTable<u64>,
+    #[br(dbg)]
     pub rest: [u32; 4],
     #[br(ignore)]
     #[bw(calc = compiled_blob.data.0.clone())]
-    compiled_blog_data: Vec<u8>,
+    compiled_blob_data: Vec<u32>,
     #[br(ignore)]
     #[bw(calc = operand_desc_table.data.clone())]
-    operand_desc_data: Vec<u8>,
+    operand_desc_data: Vec<u64>,
+}
+
+impl BinSize for u32 {
+    fn bin_size(&self) -> usize {
+        4
+    }
 }
 
 /*
@@ -255,6 +259,22 @@ impl<T: BinSize> OffsetTable<T> {
     fn add_offset(&self) -> usize {
         self.data.iter().map(|d| d.bin_size()).sum()
     }
+}
+
+#[binrw]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[bw(import_raw(args: OffsetTableWriteArgs))]
+#[br(import_raw(args: OffsetTableArgs<()>))]
+pub struct WordTable {
+    #[bw(calc = args.offset as u32)]
+    #[br(temp)]
+    offset: u32,
+    #[br(temp)]
+    #[bw(calc = data.0.len() as u32)]
+    size: u32,
+    #[bw(ignore)]
+    #[br(args(size * 4, args.inner), seek_before = SeekFrom::Start(args.header_start + offset as u64), restore_position)]
+    pub data: MaxSize<u32>,
 }
 
 #[binrw]
