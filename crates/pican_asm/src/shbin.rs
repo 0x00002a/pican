@@ -4,15 +4,13 @@ use std::{
 };
 
 use binrw::{
-    binread, binrw, binwrite,
-    file_ptr::{FilePtr, IntoSeekFrom},
-    BinRead, BinReaderExt, BinResult, BinWrite, BinWriterExt, NamedArgs, NullString, PosValue,
-    VecArgs,
+    binread, binrw, file_ptr::IntoSeekFrom, BinRead, BinReaderExt, BinResult, BinWrite,
+    BinWriterExt, NamedArgs, NullString, VecArgs,
 };
 use pican_core::{
     ops::OpCode,
     properties::OutputProperty,
-    register::{Register, RegisterKind, RegisterType},
+    register::{Register, RegisterKind},
 };
 
 use super::float24::Float24;
@@ -507,22 +505,16 @@ pub enum ShaderType {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, SeekFrom};
+    use std::io::Cursor;
 
-    use binrw::{binread, BinReaderExt, BinWrite};
+    use binrw::{BinReaderExt, BinWrite};
 
     use super::Shbin;
+    #[allow(non_snake_case)]
+    #[cfg(feature = "picasso_match_tests")]
+    mod picasso_match {
+        use super::*;
 
-    #[test]
-    fn try_example() {
-        let input = include_bytes!("./example.shbin");
-        let shbin: Shbin = Cursor::new(input).read_le().unwrap();
-        println!("{shbin:#?}");
-        let mut w = Cursor::new(Vec::new());
-        shbin.write_le(&mut w).unwrap();
-        let inner = w.into_inner();
-        let shbinroundtrip: Shbin = Cursor::new(&inner).read_le().unwrap();
-        assert_eq!(shbin, shbinroundtrip);
-        pretty_assertions::assert_eq!(inner, input);
+        include!(concat!(env!("OUT_DIR"), "/picasso_match_tests.rs"));
     }
 }

@@ -7,7 +7,7 @@
 ///
 /// More info: https://www.3dbrew.org/wiki/GPU/Shader_Instruction_Set#Floating-Point_Behavior
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[binrw::binrw]
 #[brw(little)]
 pub struct Float24([u8; 3]);
@@ -104,6 +104,10 @@ impl Float24 {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
+    use binrw::BinReaderExt;
+
     use crate::float24::{split_up_float, Float24};
 
     #[test]
