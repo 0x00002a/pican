@@ -2,9 +2,17 @@ use std::io::Write;
 
 use binrw::binrw;
 use modular_bitfield::prelude::*;
-use pican_core::ops::OpCode;
+use pican_core::{
+    ops::OpCode,
+    register::{Register, RegisterKind},
+};
+use serde::de::IntoDeserializer;
 use strum::EnumDiscriminants;
 use typesum::sumtype;
+
+use crate::ir::RegisterId;
+
+use super::RegisterIndex;
 
 #[bitfield(filled = false)]
 #[derive(Debug, BitfieldSpecifier)]
@@ -213,20 +221,26 @@ pub struct Instruction {
 }
 
 impl Instruction {
-    pub fn dst_to_register(index: u8) -> String {
+    pub fn dst_to_register(index: u8) -> Register {
         match index {
-            0x00..=0x0F => format!("o{}", index),
-            0x10..=0x1F => format!("r{}", index - 0x10),
-            _ => unreachable!(),
+            0x00..=0x0F => Register {
+                kind: RegisterKind::Output,
+                index: index.into(),
+            },
+            0x10..=0x1F => Register {
+                kind: RegisterKind::Scratch,
+                index: (index - 0x10).into(),
+            },
+            _ => panic!("dst register index invalid {index}"),
         }
     }
 
-    pub fn src_to_register(index: u8) -> String {
+    pub fn src_to_register(index: u8) -> Register {
         match index {
-            0x00..=0x0F => format!("v{}", index),
-            0x10..=0x1F => format!("r{}", index - 0x10),
-            0x20..=0x7F => format!("c{}", index - 0x20),
-            _ => unreachable!(),
+            0x00..=0x0F => Register::new(RegisterKind::Input, index.into()),
+            0x10..=0x1F => Register::new(RegisterKind::Scratch, (index - 0x10).into()),
+            0x20..=0x7F => Register::new(RegisterKind::FloatingVecUniform, (index - 0x20).into()),
+            _ => panic!("src register index invalid {index}"),
         }
     }
 
@@ -243,25 +257,22 @@ impl Instruction {
                 println!("desc: {desc:02X}, {pattern:?}");
                 format!(
                     "{}{}, {}{}{}, {}{}{}",
-                    Self::dst_to_register(dst),
+                    dst,
                     pattern.destination_mask(),
                     if pattern.s1().negate() { "-" } else { "" },
-                    Self::src_to_register(src1),
+                    src1,
                     pattern.s1().selector(),
                     if pattern.s2().negate() { "-" } else { "" },
-                    Self::src_to_register(src2),
+                    src2,
                     pattern.s2().selector(),
                 )
             }
             Operands::OneArgument { dst, src1, desc } => {
                 let pattern = &operands[desc as usize];
-                println!("desc: {desc:02X}, {pattern:?}");
                 format!(
-                    "{}{}, {}{}{}",
-                    Self::dst_to_register(dst),
+                    "{dst}{}, {}{src1}{}",
                     pattern.destination_mask(),
                     if pattern.s1().negate() { "-" } else { "" },
-                    Self::src_to_register(src1),
                     pattern.s1().selector(),
                 )
             }
@@ -274,26 +285,21 @@ impl Instruction {
                 desc: Some(desc),
             } => {
                 let pattern = &operands[desc as usize];
-                println!("desc: {desc:02X}, {pattern:?}");
                 format!(
-                    "{}{}, {}{}{}, {}{}{}, {}{}{}",
-                    Self::dst_to_register(dst),
+                    "{dst}{}, {}{src1}{}, {}{src2}{}, {}{src3}{}",
                     pattern.destination_mask(),
                     if pattern.s1().negate() { "-" } else { "" },
-                    Self::src_to_register(src1),
                     pattern.s1().selector(),
                     if pattern.s2().negate() { "-" } else { "" },
-                    Self::src_to_register(src2),
                     pattern.s2().selector(),
                     if pattern.s3().negate() { "-" } else { "" },
-                    Self::src_to_register(src3),
                     pattern.s3().selector(),
                 )
             }
             Operands::Mad { desc: None, .. } => todo!(),
             Operands::Cmp { .. } => todo!(),
             Operands::SetEmit { .. } => todo!(),
-            Operands::Conditional { .. } => todo!(),
+            Operands::ControlFlow { .. } => todo!(),
             Operands::Zero => "".to_owned(),
             Operands::Unknown => todo!(),
         };
@@ -380,38 +386,44 @@ impl InstructionFormat {
         }
     }
     pub fn to_operands(self) -> Operands {
+        fn dsr(idx: u8) -> Register {
+            Instruction::dst_to_register(idx)
+        }
+        fn sr(idx: u8) -> Register {
+            Instruction::src_to_register(idx)
+        }
         match self {
             InstructionFormat::One(o) => Operands::TwoArguments {
-                dst: o.dst(),
-                src1: o.src1(),
-                src2: o.src2(),
+                dst: dsr(o.dst()),
+                src1: sr(o.src1()),
+                src2: sr(o.src2()),
                 desc: o.desc(),
                 inverse: false,
             },
             InstructionFormat::OneI(o) => Operands::TwoArguments {
-                dst: o.dst(),
-                src1: o.src1(),
-                src2: o.src2(),
+                dst: dsr(o.dst()),
+                src1: sr(o.src1()),
+                src2: sr(o.src2()),
                 desc: o.desc(),
                 inverse: true,
             },
             InstructionFormat::OneU(o) => Operands::OneArgument {
-                dst: o.dst(),
-                src1: o.src1(),
+                dst: dsr(o.dst()),
+                src1: sr(o.src1()),
                 desc: o.desc(),
             },
             InstructionFormat::OneC(o) => Operands::Cmp {
-                src1: o.src1(),
-                src2: o.src2(),
+                src1: sr(o.src1()),
+                src2: sr(o.src2()),
             },
-            InstructionFormat::Two(o) => Operands::Conditional {
+            InstructionFormat::Two(o) => Operands::ControlFlow {
                 cond: Some(o.condop()),
-                dst: o.dst(),
+                dst_offset: o.dst(),
                 num: o.num(),
             },
-            InstructionFormat::Three(o) => Operands::Conditional {
+            InstructionFormat::Three(o) => Operands::ControlFlow {
                 cond: None,
-                dst: o.dst(),
+                dst_offset: o.dst(),
                 num: o.num(),
             },
             InstructionFormat::Four(o) => Operands::SetEmit {
@@ -420,17 +432,17 @@ impl InstructionFormat {
                 primemit: o.primemit(),
             },
             InstructionFormat::Five(o) => Operands::Mad {
-                dst: o.dst(),
-                src1: o.src1(),
-                src2: o.src2(),
-                src3: o.src3(),
+                dst: sr(o.dst()),
+                src1: sr(o.src1()),
+                src2: sr(o.src2()),
+                src3: sr(o.src3()),
                 desc: Some(o.desc()),
             },
             InstructionFormat::FiveI(o) => Operands::Mad {
-                dst: o.dst(),
-                src1: o.src1(),
-                src2: o.src2(),
-                src3: o.src3(),
+                dst: sr(o.dst()),
+                src1: sr(o.src1()),
+                src2: sr(o.src2()),
+                src3: sr(o.src3()),
                 desc: None,
             },
             InstructionFormat::Zero => Operands::Zero,
@@ -443,9 +455,9 @@ impl InstructionFormat {
 pub enum Operands {
     /// (dst, src1, src2, desc)
     TwoArguments {
-        dst: u8,
-        src1: u8,
-        src2: u8,
+        dst: Register,
+        src1: Register,
+        src2: Register,
         desc: u8,
         /// Whether it's the special form that has narrow src2 (uses 1I encoding instead)
         inverse: bool,
@@ -453,29 +465,29 @@ pub enum Operands {
 
     /// (dst, src1, desc)
     OneArgument {
-        dst: u8,
-        src1: u8,
+        dst: Register,
+        src1: Register,
         desc: u8,
     },
     Cmp {
-        src1: u8,
-        src2: u8,
+        src1: Register,
+        src2: Register,
     },
     SetEmit {
         vtxid: u8,
         winding: u8,
         primemit: u8,
     },
-    Conditional {
+    ControlFlow {
         cond: Option<u8>,
-        dst: u16,
+        dst_offset: u16,
         num: u8,
     },
     Mad {
-        dst: u8,
-        src1: u8,
-        src2: u8,
-        src3: u8,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        src3: Register,
         desc: Option<u8>,
     },
     Zero,
