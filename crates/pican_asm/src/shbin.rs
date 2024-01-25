@@ -24,7 +24,7 @@ pub struct Shbin {
     pub dvle_count: u32,
     #[br(count = dvle_count, dbg)]
     pub dvle_offsets: Vec<u32>,
-    #[br(args(s.stream_position().unwrap()))]
+    #[br(args(s.stream_position().unwrap()), dbg)]
     pub dvlp: Dvlp,
     #[br(parse_with = binrw::file_ptr::parse_from_iter(dvle_offsets.iter().copied()), seek_before(SeekFrom::Start(0)))]
     pub dvles: Vec<ExecutableSection>,
@@ -482,7 +482,7 @@ pub enum ConstantTableEntry {
 }
 impl BinSize for ConstantTableEntry {
     fn bin_size(&self) -> usize {
-        0x14
+        14
     }
 }
 
@@ -536,6 +536,7 @@ impl RegisterIndex {
             .take_while(|(_, o)| o <= &idx)
             .last()
             .ok_or("out of bounds")?;
+        println!("idx: {idx} {off}");
         let index = idx - off;
         Ok(Register::new(*k, index as usize))
     }
