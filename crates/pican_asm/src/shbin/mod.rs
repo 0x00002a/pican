@@ -101,47 +101,6 @@ impl BinSize for u32 {
     }
 }
 
-/*
-impl BinWrite for Dvlp {
-    type Args<'a> = ();
-
-    fn write_options<W: std::io::prelude::Write + Seek>(
-        &self,
-        writer: &mut W,
-        endian: binrw::Endian,
-        args: Self::Args<'_>,
-    ) -> BinResult<()> {
-        writer.write_type(&b"DVLP", endian)?;
-        writer.write_type(&0u32, endian)?; // version
-        writer.write_type_args(
-            &self.compiled_blob,
-            endian,
-            OffsetTableWriteArgs { offset: 0x48 },
-        )?;
-        let shader_size = self
-            .compiled_blob
-            .data
-            .0
-            .iter()
-            .map(|s| s.bin_size())
-            .sum::<usize>() as u64;
-        writer.write_type_args(
-            &self.operand_desc_table,
-            endian,
-            OffsetTableWriteArgs {
-                offset: 0x48 + shader_size,
-            },
-        )?;
-
-        writer.write_type(&self.rest, endian)?;
-
-        writer.write_type(&self.compiled_blob.data.0, endian)?;
-        writer.write_type(&self.operand_desc_table.data, endian)?;
-
-        Ok(())
-    }
-}*/
-
 impl BinSize for u8 {
     fn bin_size(&self) -> usize {
         1
@@ -168,16 +127,6 @@ pub struct ExecutableSectionHeader {
     pub start_float_register_idx: u8,
     pub fully_defined_verts_variable: u8,
     pub fully_defined_verts_fixed: u8,
-    /*pub constant_table_offset: u32,
-    pub constant_table_count: u32,
-    pub label_table_offset: u32,
-    pub label_table_count: u32,
-    pub output_register_table_offset: u32,
-    pub output_register_table_count: u32,
-    pub uniform_table_offset: u32,
-    pub uniform_table_count: u32,
-    pub symbol_table_offset: u32,
-    pub symbol_size_bytes: u32,*/
 }
 
 #[binread]
@@ -339,52 +288,6 @@ impl<T: BinSize> BinSize for MaxSize<T> {
         self.0.iter().map(|d| d.bin_size()).sum()
     }
 }
-
-/*
-impl<T: BinRead + 'static> BinRead for SizedTable<T>
-where
-    for<'a> T::Args<'a>: Clone,
-{
-    type Args<'a> = OffsetTableArgs<T::Args<'a>>;
-
-    fn read_options<R: std::io::prelude::Read + Seek>(
-        reader: &mut R,
-        endian: binrw::Endian,
-        args: Self::Args<'_>,
-    ) -> BinResult<Self> {
-        let offset: u32 = reader.read_type(endian)?;
-        let size: u32 = reader.read_type(endian)?;
-        println!("offset: {offset}, sz: {size}");
-        let pos = reader.stream_position()?;
-        let to = args.header_start + offset as u64;
-        reader.seek(SeekFrom::Start(to))?;
-        let mut syms = Vec::new();
-        let end = to + size as u64;
-        while reader.stream_position()? < end {
-            let string = T::read_options(reader, endian, args.inner.clone())?;
-            syms.push(string);
-        }
-        assert_eq!(reader.stream_position()?, end);
-
-        reader.seek(SeekFrom::Start(pos))?;
-        Ok(Self(syms))
-    }
-}
-impl<T: BinWrite + BinSize> BinWrite for SizedTable<T> {
-    type Args<'a> = OffsetTableWriteArgs;
-
-    fn write_options<W: std::io::prelude::Write + Seek>(
-        &self,
-        writer: &mut W,
-        endian: binrw::Endian,
-        args: Self::Args<'_>,
-    ) -> BinResult<()> {
-        writer.write_type(&args.offset, endian)?;
-        let size = self.0.iter().map(|s| s.bin_size()).sum::<usize>() as u32;
-        writer.write_type(&size, endian)?;
-        Ok(())
-    }
-}*/
 
 #[derive(NamedArgs)]
 pub struct OffsetTableArgs<Inner> {
