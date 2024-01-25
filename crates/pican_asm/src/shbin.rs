@@ -77,7 +77,7 @@ pub struct Dvlp {
     #[bw(args { offset: 40 })]
     pub compiled_blob: WordTable,
     #[br(args { header_start: start, inner: () }, dbg)]
-    #[bw(args { offset: (compiled_blob.data.bin_size() * 4) as u64 + 40 })]
+    #[bw(args { offset: (compiled_blob.data.bin_size()) as u64 + 40 })]
     pub operand_desc_table: OffsetTable<u64>,
     #[br(dbg)]
     pub rest: [u32; 4],
