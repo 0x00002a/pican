@@ -63,6 +63,10 @@ impl BinWrite for Shbin {
         let dvlp_buf = dvlp_buf.into_inner();
         writer.write_type(&dvle_offsets, endian)?;
         writer.write_all(&dvlp_buf)?;
+        let pos = writer.stream_position()?;
+        for _ in pos..pos.next_multiple_of(4) {
+            writer.write_type(&0u8, endian)?;
+        }
 
         Ok(())
     }
@@ -242,6 +246,11 @@ impl BinWrite for ExecutableSection {
         writer.write_type(&self.output_register_table.data, endian)?;
         writer.write_type(&self.uniform_table.data, endian)?;
         writer.write_type(&self.symbol_table.data.0, endian)?;
+
+        let pos = writer.stream_position()?;
+        for _ in pos..pos.next_multiple_of(4) {
+            writer.write_type(&0u8, endian)?;
+        }
 
         Ok(())
     }
@@ -461,28 +470,40 @@ impl BinSize for LabelTableEntry {
 #[binrw]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConstantTableEntry {
-    #[brw(magic = 0u8)]
-    Bool { register_id: u8, value: u8 },
-    #[brw(magic = 1u8)]
+    #[brw(magic = 0u16)]
+    Bool {
+        #[brw(pad_before = 1)]
+        register_id: u8,
+        #[brw(pad_after = 3)]
+        value: u8,
+    },
+    #[brw(magic = 1u16)]
     IVec4 {
+        #[brw(pad_before = 1)]
         register_id: u8,
         x: u8,
         y: u8,
         z: u8,
+        #[brw(pad_after = 3)]
         w: u8,
     },
-    #[brw(magic = 2u8)]
+    #[brw(magic = 2u16)]
     Vec4 {
+        #[brw(pad_after = 1)]
         register_id: u8,
+        #[brw(pad_before = 1)]
         x: Float24,
+        #[brw(pad_before = 1)]
         y: Float24,
+        #[brw(pad_before = 1)]
         z: Float24,
+        #[brw(pad_before = 1)]
         w: Float24,
     },
 }
 impl BinSize for ConstantTableEntry {
     fn bin_size(&self) -> usize {
-        14
+        0x14
     }
 }
 
