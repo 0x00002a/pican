@@ -1,5 +1,4 @@
 use std::{
-    env::temp_dir,
     fmt::Write,
     path::{Path, PathBuf},
 };
@@ -75,5 +74,5 @@ fn main() {
             .unwrap();
             s
         });
-    std::fs::write(outdir.join("picasso_match_tests.rs"), &cases).unwrap();
+    std::fs::write(outdir.join("picasso_match_tests.rs"), cases).unwrap();
 }

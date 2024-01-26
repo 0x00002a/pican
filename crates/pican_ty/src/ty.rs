@@ -1,9 +1,9 @@
 use pican_core::{
     diagnostics::FatalErrorEmitted,
     ir::{Ident, IrNode},
-    register::{RegisterKind},
+    register::RegisterKind,
 };
-use pican_pir::{ir::Operand};
+use pican_pir::ir::Operand;
 use typesum::sumtype;
 
 use crate::context::TyContext;

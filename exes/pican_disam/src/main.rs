@@ -1,5 +1,5 @@
 use binrw::BinRead;
-use std::io::{BufReader, Cursor};
+use std::io::Cursor;
 
 use pican_asm::shbin::Shbin;
 

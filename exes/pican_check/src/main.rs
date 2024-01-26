@@ -6,7 +6,6 @@ use codespan_reporting::{
 };
 use pican_core::{
     context::{IrContext, PicanContext},
-    diagnostics::FatalErrorEmitted,
     span::FileId,
 };
 use pican_frontend::parse_and_lower;
@@ -27,7 +26,7 @@ fn print_diagnostics<'a>(
 
 fn run<S: AsRef<str>>(args: &Args, input_id: FileId, ctx: &mut PicanContext<S>) -> Option<()> {
     let pir_ctx = IrContext::new();
-    let pir = parse_and_lower(input_id, &ctx, &pir_ctx)?;
+    let pir = parse_and_lower(input_id, ctx, &pir_ctx)?;
     let tycheck = ctx.types_for_module(&pir);
     tycheck.check().ok()?;
 
