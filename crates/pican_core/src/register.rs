@@ -103,6 +103,11 @@ pub struct Register {
     pub kind: RegisterKind,
     pub index: usize,
 }
+impl std::fmt::Display for Register {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}{}", self.kind.prefix(), self.index))
+    }
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum ParseRegisterKindError {

@@ -1,6 +1,7 @@
 use std::{
     io::{Cursor, Seek, SeekFrom},
     mem::size_of,
+    ops::Deref,
 };
 
 use binrw::{
@@ -13,6 +14,8 @@ use pican_core::{
     register::{Register, RegisterKind},
 };
 
+use self::instruction::{Instruction, OperandDescriptor};
+
 use super::float24::Float24;
 
 pub mod instruction;
@@ -24,9 +27,9 @@ pub mod instruction;
 pub struct Shbin {
     #[br(temp)]
     pub dvle_count: u32,
-    #[br(count = dvle_count, dbg)]
+    #[br(count = dvle_count)]
     pub dvle_offsets: Vec<u32>,
-    #[br(args(s.stream_position().unwrap()), dbg)]
+    #[br(args(s.stream_position().unwrap()))]
     pub dvlp: Dvlp,
     #[br(parse_with = binrw::file_ptr::parse_from_iter(dvle_offsets.iter().copied()), seek_before(SeekFrom::Start(0)))]
     pub dvles: Vec<ExecutableSection>,
@@ -79,20 +82,20 @@ impl BinWrite for Shbin {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Dvlp {
     _mversion: u32,
-    #[br(args { header_start: start, inner: () }, dbg)]
+    #[br(args { header_start: start, inner: () })]
     #[bw(args { offset: 40 })]
-    pub compiled_blob: WordTable,
-    #[br(args { header_start: start, inner: () }, dbg)]
-    #[bw(args { offset: (compiled_blob.data.bin_size()) as u64 + 40 })]
-    pub operand_desc_table: OffsetTable<u64>,
-    #[br(dbg)]
+    pub compiled_blob: ShaderBlob,
+    #[br(args { header_start: start, inner: () })]
+    #[bw(args { offset: (compiled_blob.bin_size()) as u64 + 40 })]
+    pub operand_desc_table: OffsetTable<OperandDescriptor>,
+    #[bw(assert(s.stream_position().unwrap() == 24))]
     pub rest: [u32; 4],
     #[br(ignore)]
-    #[bw(calc = compiled_blob.data.0.clone())]
-    compiled_blob_data: Vec<u32>,
+    #[bw(calc = compiled_blob.deref().clone(), assert(s.stream_position().unwrap() == 40))]
+    compiled_blob_data: Vec<Instruction>,
     #[br(ignore)]
-    #[bw(calc = operand_desc_table.data.clone())]
-    operand_desc_data: Vec<u64>,
+    #[bw(calc = operand_desc_table.data.clone(), assert(s.stream_position().unwrap() == 40 + compiled_blob.bin_size() as u64))]
+    operand_desc_data: Vec<OperandDescriptor>,
 }
 
 impl BinSize for u32 {
@@ -133,7 +136,7 @@ pub struct ExecutableSectionHeader {
 #[br(stream = s)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExecutableSection {
-    #[br(try_calc = s.stream_position(), dbg)]
+    #[br(try_calc = s.stream_position())]
     header_start: u64,
     #[br(assert(s.stream_position().unwrap() - header_start == 0x18))]
     pub header: ExecutableSectionHeader,
@@ -221,20 +224,25 @@ impl<T: BinSize> OffsetTable<T> {
     }
 }
 
-#[binrw]
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[bw(import_raw(args: OffsetTableWriteArgs))]
+#[derive(Clone, Debug, PartialEq, Eq, BinRead, BinWrite)]
 #[br(import_raw(args: OffsetTableArgs<()>))]
-pub struct WordTable {
-    #[bw(calc = args.offset as u32)]
-    #[br(temp)]
-    offset: u32,
-    #[br(temp)]
-    #[bw(calc = data.0.len() as u32)]
-    size: u32,
-    #[bw(ignore)]
-    #[br(args(size * 4, args.inner), seek_before = SeekFrom::Start(args.header_start + offset as u64), restore_position)]
-    pub data: MaxSize<u32>,
+#[bw(import_raw(args: OffsetTableWriteArgs))]
+pub struct ShaderBlob(
+    #[br(args { header_start: args.header_start, inner: () })]
+    #[bw(args { offset: args.offset })]
+    pub OffsetTable<Instruction>,
+);
+impl BinSize for ShaderBlob {
+    fn bin_size(&self) -> usize {
+        self.0.data.len() * 4
+    }
+}
+impl Deref for ShaderBlob {
+    type Target = Vec<Instruction>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.data
+    }
 }
 
 #[binrw]
@@ -513,6 +521,7 @@ mod tests {
     #[cfg(feature = "picasso_match_tests")]
     mod picasso_match {
         use super::*;
+        use pretty_assertions::assert_eq;
 
         include!(concat!(env!("OUT_DIR"), "/picasso_match_tests.rs"));
     }

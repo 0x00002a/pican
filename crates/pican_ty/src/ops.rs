@@ -109,10 +109,9 @@ pub fn slots_for_opcode(op: OpCode) -> OperandSlots {
         | OpCode::Rcp
         | OpCode::Rsq
         | OpCode::Mov => DST_SRC,
-        OpCode::Mova => todo!(),
+        OpCode::MovA => todo!(),
         OpCode::Cmp => todo!(),
         OpCode::Call => todo!(),
-        OpCode::For => todo!(),
         OpCode::BreakC => todo!(),
         OpCode::CallC => todo!(),
         OpCode::IfC => todo!(),
@@ -134,5 +133,12 @@ pub fn slots_for_opcode(op: OpCode) -> OperandSlots {
                 allowed_types: &[OperandTy::SrcReg, OperandTy::WideSrc],
             },
         ]),
+        OpCode::DphI => todo!(),
+        OpCode::DstI => todo!(),
+        OpCode::SgeI => todo!(),
+        OpCode::SltI => todo!(),
+        OpCode::Loop => todo!(),
+        OpCode::MadI => todo!(),
+        OpCode::Unknown => todo!(),
     }
 }
