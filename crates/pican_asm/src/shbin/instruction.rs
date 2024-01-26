@@ -3,11 +3,14 @@ use std::io::{Seek, Write};
 use binrw::{binrw, BinRead, BinReaderExt, BinWrite, BinWriterExt};
 use modular_bitfield::prelude::*;
 use pican_core::{
+    ir::SwizzleDim,
     ops::OpCode,
     register::{Register, RegisterKind},
 };
 use strum::EnumDiscriminants;
 use typesum::sumtype;
+
+use crate::ir::SwizzleDims;
 
 const OPCODE_OFFSET: u32 = 0x1a;
 
@@ -18,6 +21,32 @@ pub struct ComponentMask {
     z: bool,
     y: bool,
     x: bool,
+}
+impl From<SwizzleDims> for ComponentMask {
+    fn from(value: SwizzleDims) -> Self {
+        value.iter().fold(
+            Self::new()
+                .with_x(false)
+                .with_y(false)
+                .with_z(false)
+                .with_w(false),
+            |s, v| match v {
+                pican_core::ir::SwizzleDim::X => s.with_x(true),
+                pican_core::ir::SwizzleDim::Y => s.with_y(true),
+                pican_core::ir::SwizzleDim::Z => s.with_z(true),
+                pican_core::ir::SwizzleDim::W => s.with_w(true),
+            },
+        )
+    }
+}
+impl Default for ComponentMask {
+    fn default() -> Self {
+        Self::new()
+            .with_x(true)
+            .with_y(true)
+            .with_z(true)
+            .with_w(true)
+    }
 }
 
 impl std::fmt::Display for ComponentMask {
@@ -61,6 +90,17 @@ impl std::fmt::Display for Component {
     }
 }
 
+impl From<SwizzleDim> for Component {
+    fn from(value: SwizzleDim) -> Self {
+        match value {
+            SwizzleDim::X => Self::X,
+            SwizzleDim::Y => Self::Y,
+            SwizzleDim::Z => Self::Z,
+            SwizzleDim::W => Self::W,
+        }
+    }
+}
+
 #[bitfield]
 #[derive(Debug, BitfieldSpecifier)]
 pub struct ComponentSelector {
@@ -82,6 +122,48 @@ impl std::fmt::Display for ComponentSelector {
         }
     }
 }
+impl From<SwizzleDims> for ComponentSelector {
+    fn from(value: SwizzleDims) -> Self {
+        Self::new()
+            .with_x(
+                value
+                    .first()
+                    .copied()
+                    .map(Into::into)
+                    .unwrap_or(Component::X),
+            )
+            .with_y(
+                value
+                    .get(1)
+                    .copied()
+                    .map(Into::into)
+                    .unwrap_or(Component::Y),
+            )
+            .with_z(
+                value
+                    .get(2)
+                    .copied()
+                    .map(Into::into)
+                    .unwrap_or(Component::Z),
+            )
+            .with_w(
+                value
+                    .get(3)
+                    .copied()
+                    .map(Into::into)
+                    .unwrap_or(Component::W),
+            )
+    }
+}
+impl Default for ComponentSelector {
+    fn default() -> Self {
+        Self::new()
+            .with_x(Component::X)
+            .with_y(Component::Y)
+            .with_z(Component::Z)
+            .with_w(Component::W)
+    }
+}
 
 #[bitfield(filled = false)]
 #[derive(Debug, BitfieldSpecifier)]
@@ -91,19 +173,31 @@ pub struct OperandSource {
     #[bits = 8]
     selector: ComponentSelector,
 }
+impl Default for OperandSource {
+    fn default() -> Self {
+        Self::new()
+            .with_negate(false)
+            .with_selector(Default::default())
+    }
+}
+impl From<SwizzleDims> for OperandSource {
+    fn from(value: SwizzleDims) -> Self {
+        Self::new().with_negate(false).with_selector(value.into())
+    }
+}
 
 #[bitfield(bits = 64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, BinRead, BinWrite)]
 #[brw(little)]
 pub struct OperandDescriptor {
     #[bits = 4]
-    destination_mask: ComponentMask,
+    pub destination_mask: ComponentMask,
     #[bits = 9]
-    s1: OperandSource,
+    pub s1: OperandSource,
     #[bits = 9]
-    s2: OperandSource,
+    pub s2: OperandSource,
     #[bits = 9]
-    s3: OperandSource,
+    pub s3: OperandSource,
     #[skip]
     _unknown: B33,
 }
@@ -440,8 +534,21 @@ impl InstructionFormat {
         }
     }
 }
+pub trait OpCodeInstructionFormat {
+    fn instruction_format(self) -> InstructionFormatKind;
+}
+impl OpCodeInstructionFormat for OpCode {
+    fn instruction_format(self) -> InstructionFormatKind {
+        let r = FORMAT_TABLE[self as u8 as usize].0;
+        debug_assert_eq!(FORMAT_TABLE.iter().find(|(_, o)| *o == self).unwrap().0, r);
+        r
+    }
+}
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+//pub const INSTR_FMT_TO_OPERANDS_KIND = &[];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[strum_discriminants(name(OperandsKind))]
 pub enum Operands {
     /// (dst, src1, src2, desc)
     TwoArguments {
@@ -583,7 +690,7 @@ macro_rules! instruct {
 }
 
 macro_rules! instructs {
-    ($from:ident, $to:ident, $set_opcode:ident, $($f:ident { $($v:ident: $c:expr),* } = $arm:ident $armty:ident { $($vtn:ident => $vtt:ident),* },)*) => {
+    ($from:ident, $to:ident, $kind_map:ident, $set_opcode:ident, $($f:ident { $($v:ident: $c:expr),* } = $arm:ident $armty:ident { $($vtn:ident => $vtt:ident),* },)*) => {
         impl From<$to> for $from {
             fn from(t: $to) -> Self {
                 match t {
@@ -620,12 +727,17 @@ macro_rules! instructs {
                 }
             }
         }
+
+        paste::paste! {
+            pub const $kind_map: &[([<$to Kind>], [<$from Kind>])] = &[$(([<$to Kind>]::$arm, [<$from Kind>]::$f),)* ([<$to Kind>]::Unknown, [<$from Kind>]::Unknown), ([<$to Kind>]::Zero, [<$from Kind>]::Zero)];
+        }
     }
 }
 
 instructs! {
     Operands,
     InstructionFormat,
+    INSTR_FMT_TO_OPERANDS_KIND,
     set_opcode,
     TwoArguments { inverse: false } = One InstructionFormat1 { dst => dst, src1 => src1, src2 => src2, desc => desc, idx1 => relative_offset },
     TwoArguments { inverse: true } = OneI InstructionFormat1I { dst => dst, src1 => src1, src2 => src2, desc => desc, idx2 => relative_offset },

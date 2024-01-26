@@ -6,7 +6,6 @@ use pican_core::{
 };
 
 use serde::{Deserialize, Serialize};
-use typesum::sumtype;
 
 /// Identifier for a free register which is awaiting allocation
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize)]
@@ -17,6 +16,8 @@ pub struct FreeRegId(usize);
 pub struct FreeRegister {
     pub kind: RegisterKind,
 }
+
+pub type SwizzleDims = CopyArrayVec<SwizzleDim, 4>;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize)]
 pub struct RegisterId(usize);
@@ -50,12 +51,6 @@ pub struct Operand {
     pub swizzle: Option<CopyArrayVec<SwizzleDim, 4>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize)]
-pub struct Operation {
-    pub opcode: OpCode,
-    pub operands: CopyArrayVec<Operand, 4>,
-}
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize, Deserialize)]
 pub struct Vec4<T> {
     pub x: T,
@@ -83,29 +78,14 @@ impl ProcId {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize)]
 pub enum Directive {
-    Proc {
-        id: ProcId,
-    },
+    Proc { id: ProcId },
     End,
-    /// .fvec, .ivec, .bool
-    /*In {
-        name: Ident<'i>,
-        reg: Option<Register>,
-    },
-    Out {
-        name: Option<Ident<'i>>,
-        property: OutputProperty,
-    },*/
     NoDvle,
-    Entry {
-        name: ProcId,
-    },
+    Entry { name: ProcId },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize)]
-#[sumtype(only = from)]
-pub enum Instruction {
-    Op(Operation),
-    Directive(Directive),
-    //Label { name: Ident<'i> },
+pub struct Instruction {
+    pub opcode: OpCode,
+    pub operands: CopyArrayVec<Operand, 4>,
 }

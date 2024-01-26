@@ -12,6 +12,9 @@ impl<'a> Ident<'a> {
     pub fn copy_to(self, to: &Bump) -> Ident<'_> {
         Ident(to.alloc_str(self.0))
     }
+    pub fn as_str(&self) -> &str {
+        self.0
+    }
 }
 
 impl<'a> std::cmp::PartialEq<&str> for Ident<'a> {

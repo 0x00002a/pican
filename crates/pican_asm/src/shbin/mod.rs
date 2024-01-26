@@ -1,7 +1,7 @@
 use std::{
     io::{Cursor, Seek, SeekFrom},
     mem::size_of,
-    ops::Deref,
+    ops::{Deref, DerefMut},
 };
 
 use binrw::{
@@ -29,7 +29,7 @@ const DVLP_HEADER_SZ: u64 = 0x28;
 pub struct Shbin {
     #[br(temp)]
     pub dvle_count: u32,
-    #[br(count = dvle_count)]
+    #[br(count = dvle_count, temp)]
     pub dvle_offsets: Vec<u32>,
     #[br(args(s.stream_position().unwrap()))]
     pub dvlp: Dvlp,
@@ -134,13 +134,15 @@ pub struct Operation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[brw(magic = b"DVLE")]
 pub struct ExecutableSectionHeader {
-    pub mversion: u16,
+    #[br(temp)]
+    #[bw(calc = 4098)]
+    pub _mversion: u16,
     pub shader_ty: ShaderType,
     pub merge_vertex_geo: u8,
     pub main_offset_words: u32,
     pub endmain_offset_words: u32,
-    pub used_input_registers: u16,
-    pub used_output_registers: u16,
+    pub used_input_registers: IoRegisterBitMask,
+    pub used_output_registers: IoRegisterBitMask,
     pub geo_shader_type: u8,
     pub start_float_register_idx: u8,
     pub fully_defined_verts_variable: u8,
@@ -151,7 +153,7 @@ pub struct ExecutableSectionHeader {
 #[br(stream = s)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExecutableSection {
-    #[br(try_calc = s.stream_position())]
+    #[br(try_calc = s.stream_position(), temp)]
     header_start: u64,
     #[br(assert(s.stream_position().unwrap() - header_start == 0x18))]
     pub header: ExecutableSectionHeader,
@@ -259,9 +261,24 @@ impl Deref for ShaderBlob {
         &self.0.data
     }
 }
+impl DerefMut for ShaderBlob {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0.data
+    }
+}
 
 #[binrw]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Copy)]
+pub struct IoRegisterBitMask(u16);
+
+impl IoRegisterBitMask {
+    pub fn mark_used(&mut self, r: Register) {
+        self.0 |= 1 << r.index;
+    }
+}
+
+#[binrw]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 #[bw(import_raw(args: OffsetTableWriteArgs))]
 #[br(import_raw(args: OffsetTableArgs<<T as BinRead>::Args<'_>>))]
 pub struct SizedTable<T>
@@ -282,6 +299,12 @@ where
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MaxSize<T>(pub Vec<T>);
+
+impl<T> Default for MaxSize<T> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 
 impl<T: BinRead> BinRead for MaxSize<T>
 where
@@ -327,6 +350,14 @@ pub struct OffsetTableWriteArgs {
 pub struct OffsetTable<T> {
     pub data: Vec<T>,
 }
+impl<T> Default for OffsetTable<T> {
+    fn default() -> Self {
+        Self {
+            data: Default::default(),
+        }
+    }
+}
+
 impl<T: BinRead + 'static> BinRead for OffsetTable<T>
 where
     for<'a> T::Args<'a>: Clone,
@@ -407,11 +438,11 @@ pub enum ConstantTableEntry {
     IVec4 {
         #[brw(pad_before = 1)]
         register_id: u8,
-        x: u8,
-        y: u8,
-        z: u8,
+        x: i8,
+        y: i8,
+        z: i8,
         #[brw(pad_after = 3)]
-        w: u8,
+        w: i8,
     },
     #[brw(magic = 2u16)]
     Vec4 {

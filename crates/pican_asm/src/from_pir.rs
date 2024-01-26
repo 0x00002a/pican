@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use pican_core::{
     context::PicanContext,
-    diagnostics::{Diagnostics, FatalErrorEmitted},
-    ir::{Ident, SwizzleDims},
+    diagnostics::{Diagnostic, DiagnosticBuilder, Diagnostics, FatalErrorEmitted},
+    ir::{Ident, IrNode, SwizzleDims},
     register::{Register, RegisterKind},
 };
 use pican_pir::{
@@ -12,11 +12,9 @@ use pican_pir::{
 };
 
 use crate::{
-    context::AsmContext,
+    context::{AsmContext, ProcInfo},
     instrs::InstructionPack,
-    ir::{
-        self, FreeRegister, Instruction, Operation, ProcId, RegHole, RegHoleKind, RegisterId, Vec4,
-    },
+    ir::{self, FreeRegister, Instruction, ProcId, RegHole, RegHoleKind, RegisterId, Vec4},
 };
 
 #[derive(Debug)]
@@ -132,8 +130,8 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
     }
     fn lower_entry_point(&mut self, ent: &EntryPoint<'a>) -> Result<(), FatalErrorEmitted> {
         let id = self.procs.id_for(*ent.name.get());
-        self.asm
-            .push(Instruction::Directive(crate::ir::Directive::Proc { id }));
+        assert!(!ent.ops.get().is_empty(), "no instructions for proc");
+        let start = self.asm.next_offset();
 
         for op in ent.ops.get().iter().map(|p| p.get()) {
             let operands = op
@@ -142,14 +140,19 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                 .iter()
                 .map(|operand| self.lower_operand(operand.get()))
                 .collect();
-            self.asm.push(Operation {
+            let pos = self.asm.push(Instruction {
                 opcode: op.opcode.into_inner(),
                 operands,
             });
         }
-
-        self.asm
-            .push(Instruction::Directive(crate::ir::Directive::End));
+        let end = self.asm.next_offset();
+        self.asm_ctx.define_proc(
+            id,
+            ProcInfo {
+                instr_start: start,
+                instr_end: end,
+            },
+        );
         Ok(())
     }
     fn lower(mut self) -> Result<(AsmContext, InstructionPack), FatalErrorEmitted> {
@@ -157,7 +160,13 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
             let name = *name.get();
             match value.get() {
                 pican_pir::bindings::BindingValue::Register(r) => {
-                    let reg = self.lower_register(*r);
+                    let r = *r;
+                    match r.kind {
+                        RegisterKind::Input => self.asm_ctx.used_input_registers.mark_used(r),
+                        RegisterKind::Output => self.asm_ctx.used_input_registers.mark_used(r),
+                        _ => {}
+                    }
+                    let reg = self.lower_register(r);
                     self.ident_to_reg.insert(name, reg);
                 }
                 pican_pir::bindings::BindingValue::Uniform(u) => {
@@ -184,13 +193,21 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     pican_pir::ir::ConstantUniform::Integer(i) => {
                         let i = i.get();
                         let id = self.regs.next_reg_id();
+                        let conv_i =
+                            |i: IrNode<i32>| -> Result<i8, FatalErrorEmitted> {
+                                i.into_inner().try_into().map_err(|e| {
+                                    self.diag.fatal::<()>(DiagnosticBuilder::error().at(&i).primary(
+                                        "integer too large, it must fit in an 8-bit signed",
+                                    ).build()).unwrap_err()
+                                })
+                            };
                         self.asm_ctx.define_constant(
                             id,
                             crate::context::ConstantUniform::IVec(Vec4::new(
-                                *i[0].get(),
-                                *i[1].get(),
-                                *i[2].get(),
-                                *i[3].get(),
+                                conv_i(i[0])?,
+                                conv_i(i[1])?,
+                                conv_i(i[2])?,
+                                conv_i(i[3])?,
                             )),
                         );
                         self.ident_to_reg.insert(
@@ -232,9 +249,11 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
 
                     let reg = if let Some(r) = o.register {
                         let id = self.regs.id_for_reg(*r.get());
+                        let r = r.into_inner();
+                        self.asm_ctx.used_output_registers.mark_used(r);
                         RegHole {
                             id,
-                            kind: RegHoleKind::Fixed(r.into_inner()),
+                            kind: RegHoleKind::Fixed(r),
                         }
                     } else {
                         let id = self.regs.next_reg_id();
