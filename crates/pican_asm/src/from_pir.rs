@@ -301,13 +301,12 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                         self.asm_ctx.used_output_registers.mark_used(r);
                         self.lower_register(r)
                     } else {
-                        let id = self.regs.next_reg_id();
-                        RegHole {
-                            id,
-                            kind: RegHoleKind::Free(FreeRegister {
-                                kind: RegisterKind::Output,
-                            }),
-                        }
+                        let reg = self.unif_regs.allocate_diag(
+                            RegisterKind::FloatingVecUniform,
+                            self.diag,
+                            &value,
+                        )?;
+                        self.lower_register(reg)
                     };
                     self.ident_to_reg.insert(name, reg);
                 }
