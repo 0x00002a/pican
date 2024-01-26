@@ -108,7 +108,7 @@ impl From<SwizzleDim> for Component {
 }
 
 #[bitfield]
-#[derive(Debug, BitfieldSpecifier)]
+#[derive(Debug, BitfieldSpecifier, PartialEq, Eq)]
 pub struct ComponentSelector {
     w: Component,
     z: Component,
@@ -130,35 +130,30 @@ impl std::fmt::Display for ComponentSelector {
 }
 impl From<SwizzleDims> for ComponentSelector {
     fn from(value: SwizzleDims) -> Self {
-        Self::new()
-            .with_x(
-                value
-                    .first()
-                    .copied()
-                    .map(Into::into)
-                    .unwrap_or(Component::X),
-            )
-            .with_y(
-                value
-                    .get(1)
-                    .copied()
-                    .map(Into::into)
-                    .unwrap_or(Component::Y),
-            )
-            .with_z(
-                value
-                    .get(2)
-                    .copied()
-                    .map(Into::into)
-                    .unwrap_or(Component::Z),
-            )
-            .with_w(
-                value
-                    .get(3)
-                    .copied()
-                    .map(Into::into)
-                    .unwrap_or(Component::W),
-            )
+        match value.len() {
+            0 => Self::default(),
+            1 => Self::new()
+                .with_x(value[0].into())
+                .with_y(value[0].into())
+                .with_z(value[0].into())
+                .with_w(value[0].into()),
+            2 => Self::new()
+                .with_x(value[0].into())
+                .with_y(value[1].into())
+                .with_z(value[1].into())
+                .with_w(value[1].into()),
+            3 => Self::new()
+                .with_x(value[0].into())
+                .with_y(value[1].into())
+                .with_z(value[2].into())
+                .with_w(value[2].into()),
+            4 => Self::new()
+                .with_x(value[0].into())
+                .with_y(value[1].into())
+                .with_z(value[2].into())
+                .with_w(value[3].into()),
+            _ => unreachable!(),
+        }
     }
 }
 impl Default for ComponentSelector {
@@ -761,7 +756,9 @@ mod tests {
     use std::io::Cursor;
 
     use binrw::{BinRead, BinWriterExt};
-    use pican_core::ops::OpCode;
+    use pican_core::{copy_arrayvec::CopyArrayVec, ir::SwizzleDim, ops::OpCode};
+
+    use crate::shbin::instruction::{Component, ComponentSelector};
 
     use super::{Instruction, Operands};
 
@@ -776,5 +773,20 @@ mod tests {
         let bin = c.into_inner();
         let rt = Instruction::read_le(&mut Cursor::new(&bin)).unwrap();
         assert_eq!(&ops[0], &rt);
+    }
+    #[test]
+    fn comp_selector_from_swizzle_dims() {
+        assert_eq!(
+            ComponentSelector::from(CopyArrayVec::from_iter([
+                SwizzleDim::X,
+                SwizzleDim::X,
+                SwizzleDim::Y
+            ])),
+            ComponentSelector::new()
+                .with_x(Component::X)
+                .with_y(Component::X)
+                .with_z(Component::Y)
+                .with_w(Component::Y)
+        )
     }
 }
