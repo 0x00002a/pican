@@ -29,15 +29,26 @@ pub struct ProcInfo {
 
 pub type SymbolId = string_interner::DefaultSymbol;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Symbols {
     syms: StringInterner,
+}
+impl Symbols {
+    pub fn iter(&self) -> impl Iterator<Item = (SymbolId, &str)> {
+        self.syms.into_iter()
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OutputInfo {
     pub property: OutputProperty,
     pub register: RegisterId,
     pub mask: ComponentMask,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BoundUniform {
+    pub name: SymbolId,
+    pub start_register: Register,
+    pub end_register: Register,
 }
 
 #[derive(Debug, Default)]
@@ -46,8 +57,9 @@ pub struct AsmContext {
     pub constants: HashMap<RegisterId, ConstantUniform>,
     pub allocated_registers: HashMap<RegisterId, Register>,
     pub outputs: Vec<OutputInfo>,
+    pub uniforms: Vec<BoundUniform>,
     procs: HashMap<ProcId, ProcInfo>,
-    symbols: Symbols,
+    pub symbols: Symbols,
     main: Option<ProcId>,
     pub used_input_registers: IoRegisterBitMask,
     pub used_output_registers: IoRegisterBitMask,
@@ -57,7 +69,7 @@ impl AsmContext {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn define_symbol(&mut self, sym: SymbolId, name: Ident) -> SymbolId {
+    pub fn define_symbol(&mut self, name: Ident) -> SymbolId {
         self.symbols.syms.get_or_intern(name.as_str())
     }
     pub fn define_constant(&mut self, reg: RegisterId, value: ConstantUniform) {

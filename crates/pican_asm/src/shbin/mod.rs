@@ -182,7 +182,7 @@ pub struct ExecutableSection {
     #[br(args { header_start, inner: () })]
     pub uniform_table: OffsetTable<UniformTableEntry>,
     #[br(args { header_start, inner: () })]
-    pub symbol_table: SizedTable<NullString>,
+    pub symbol_table: SymbolTable,
 }
 impl BinWrite for ExecutableSection {
     type Args<'a> = ();
@@ -301,12 +301,8 @@ impl IoRegisterBitMask {
 #[binrw]
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 #[bw(import_raw(args: OffsetTableWriteArgs))]
-#[br(import_raw(args: OffsetTableArgs<<T as BinRead>::Args<'_>>))]
-pub struct SizedTable<T>
-where
-    T: BinRead + BinWrite + BinSize,
-    for<'a> <T as BinRead>::Args<'a>: Clone,
-{
+#[br(import_raw(args: OffsetTableArgs<()>))]
+pub struct SymbolTable {
     #[bw(calc = args.offset as u32)]
     #[br(temp)]
     offset: u32,
@@ -315,7 +311,14 @@ where
     size: u32,
     #[bw(ignore)]
     #[br(args(size, args.inner), seek_before = SeekFrom::Start(args.header_start + offset as u64), restore_position)]
-    pub data: MaxSize<T>,
+    pub data: MaxSize<NullString>,
+}
+impl From<Vec<NullString>> for SymbolTable {
+    fn from(value: Vec<NullString>) -> Self {
+        Self {
+            data: MaxSize(value),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -533,6 +536,11 @@ impl RegisterIndex {
             .ok_or("out of bounds")?;
         let index = idx - off;
         Ok(Register::new(*k, index as usize))
+    }
+}
+impl From<Register> for RegisterIndex {
+    fn from(value: Register) -> Self {
+        Self(value)
     }
 }
 

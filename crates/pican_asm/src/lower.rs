@@ -1,17 +1,19 @@
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range};
 
 use crate::{
-    context::AsmContext,
+    context::{AsmContext, SymbolId},
     float24::Float24,
     instrs::{InstructionOffset, InstructionPack},
     ir::{self, RegisterId, SwizzleDims},
     shbin::{
         self,
         instruction::{OpCodeInstructionFormat, OperandDescriptor},
-        ConstantTableEntry, ExecutableSection, ExecutableSectionHeader, Shbin,
+        ConstantTableEntry, ExecutableSection, ExecutableSectionHeader, MaxSize, Shbin,
+        SymbolTable, UniformTableEntry,
     },
 };
 
+use binrw::NullString;
 use pican_core::{
     copy_arrayvec::CopyArrayVec,
     ir::SwizzleDim,
@@ -29,6 +31,7 @@ pub const MAX_SHBIN_DESCRIPTORS: usize = 128;
 struct LowerCtx {
     descriptors: CopyArrayVec<shi::OperandDescriptor, MAX_SHBIN_DESCRIPTORS>,
 }
+
 impl LowerCtx {
     fn add_desc(&mut self, desc: OperandDescriptor) -> u8 {
         let offset = self.descriptors.len() as u8;
@@ -129,6 +132,8 @@ impl LowerCtx {
                     .get(id)
                     .expect("found unallocated constant, did register allocation not happen?")
             };
+            let (sym_to_offset, sym_tbl) = build_symbol_table(mctx);
+
             out.dvles.push(ExecutableSection {
                 header: ExecutableSectionHeader {
                     shader_ty: shbin::ShaderType::Vertex,
@@ -193,8 +198,17 @@ impl LowerCtx {
                     })
                     .collect::<Vec<_>>()
                     .into(),
-                uniform_table: Default::default(),
-                symbol_table: Default::default(),
+                uniform_table: mctx
+                    .uniforms
+                    .iter()
+                    .map(|unif| UniformTableEntry {
+                        symbol_offset: *sym_to_offset.get(&unif.name).unwrap(),
+                        start_register: unif.start_register.into(),
+                        end_register: unif.end_register.into(),
+                    })
+                    .collect::<Vec<_>>()
+                    .into(),
+                symbol_table: sym_tbl.into(),
             });
         } else {
             // todo: add logging and warn here instead
@@ -214,4 +228,15 @@ impl From<Option<SwizzleDims>> for shi::OperandSource {
     fn from(value: Option<SwizzleDims>) -> Self {
         value.map(Into::into).unwrap_or_default()
     }
+}
+
+fn build_symbol_table(ctx: &AsmContext) -> (HashMap<SymbolId, u32>, Vec<NullString>) {
+    let mut sym_to_offset = HashMap::new();
+    let mut tbl = Vec::new();
+    for (id, sym) in ctx.symbols.iter() {
+        let offset = tbl.len();
+        sym_to_offset.insert(id, offset as u32);
+        tbl.push(sym.into());
+    }
+    (sym_to_offset, tbl)
 }

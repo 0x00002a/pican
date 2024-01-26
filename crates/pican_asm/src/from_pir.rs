@@ -12,7 +12,7 @@ use pican_pir::{
 };
 
 use crate::{
-    context::{AsmContext, ProcInfo},
+    context::{AsmContext, BoundUniform, ProcInfo},
     float24::Float24,
     instrs::InstructionPack,
     ir::{self, FreeRegister, Instruction, ProcId, RegHole, RegHoleKind, RegisterId, Vec4},
@@ -75,6 +75,30 @@ impl RegCache {
     }
 }
 
+#[derive(Default)]
+struct FreeUnifRegisters {
+    next_bool: usize,
+    next_int: usize,
+    next_float: usize,
+}
+impl FreeUnifRegisters {
+    fn allocate(&mut self, kind: RegisterKind) -> Option<Register> {
+        let next = match kind {
+            RegisterKind::FloatingVecUniform => &mut self.next_float,
+            RegisterKind::IntegerVecUniform => &mut self.next_int,
+            RegisterKind::BoolUniform => &mut self.next_bool,
+            _ => unreachable!(),
+        };
+        if *next > kind.max_index() {
+            None
+        } else {
+            let r = Register::new(kind, *next);
+            *next += 1;
+            Some(r)
+        }
+    }
+}
+
 struct LowerCtx<'a, 'm, 'c> {
     asm_ctx: AsmContext,
     asm: InstructionPack,
@@ -84,6 +108,7 @@ struct LowerCtx<'a, 'm, 'c> {
     diag: &'c Diagnostics,
     regs: RegCache,
     ident_to_reg: HashMap<Ident<'a>, RegHole>,
+    unif_regs: FreeUnifRegisters,
 }
 impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
     fn lower_register(&mut self, r: Register) -> RegHole {
@@ -176,24 +201,29 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     self.ident_to_reg.insert(name, reg);
                 }
                 pican_pir::bindings::BindingValue::Uniform(u) => {
-                    let id = self.regs.next_reg_id();
-                    self.ident_to_reg.insert(
+                    let kind = match u.ty.get() {
+                        pican_pir::ty::UniformTy::Bool => RegisterKind::BoolUniform,
+                        pican_pir::ty::UniformTy::Integer => RegisterKind::IntegerVecUniform,
+                        pican_pir::ty::UniformTy::Float => RegisterKind::FloatingVecUniform,
+                    };
+                    let reg = self.unif_regs.allocate(kind).ok_or_else(|| {
+                        self.diag
+                            .fatal::<()>(
+                                DiagnosticBuilder::error()
+                                    .at(&value)
+                                    .primary("sorry but I've run out of available registers for this type of uniform")
+                                    .build(),
+                            )
+                            .unwrap_err()
+                    })?;
+                    let r = self.lower_register(reg);
+                    self.ident_to_reg.insert(name, r);
+                    let name = self.asm_ctx.define_symbol(name);
+                    self.asm_ctx.uniforms.push(BoundUniform {
                         name,
-                        RegHole {
-                            id,
-                            kind: RegHoleKind::Free(FreeRegister {
-                                kind: match u.ty.get() {
-                                    pican_pir::ty::UniformTy::Bool => RegisterKind::BoolUniform,
-                                    pican_pir::ty::UniformTy::Integer => {
-                                        RegisterKind::IntegerVecUniform
-                                    }
-                                    pican_pir::ty::UniformTy::Float => {
-                                        RegisterKind::FloatingVecUniform
-                                    }
-                                },
-                            }),
-                        },
-                    );
+                        start_register: reg,
+                        end_register: reg,
+                    })
                 }
                 pican_pir::bindings::BindingValue::Constant(c) => match c {
                     pican_pir::ir::ConstantUniform::Integer(i) => {
@@ -281,10 +311,16 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     self.ident_to_reg.insert(name, reg);
                 }
                 pican_pir::bindings::BindingValue::Input(i) => {
-                    let r = Register::new(RegisterKind::Input, i.index);
-                    self.asm_ctx.used_input_registers.mark_used(r);
-                    let r = self.lower_register(r);
+                    let reg = Register::new(RegisterKind::Input, i.index);
+                    self.asm_ctx.used_input_registers.mark_used(reg);
+                    let r = self.lower_register(reg);
                     self.ident_to_reg.insert(i.name.into_inner(), r);
+                    let name = self.asm_ctx.define_symbol(i.name.into_inner());
+                    self.asm_ctx.uniforms.push(BoundUniform {
+                        name,
+                        start_register: reg,
+                        end_register: reg,
+                    })
                 }
 
                 pican_pir::bindings::BindingValue::SwizzleRegister(_)
@@ -314,6 +350,7 @@ pub fn from_pir<S: AsRef<str>>(
         diag: &ctx.diag,
         regs: RegCache::default(),
         ident_to_reg: Default::default(),
+        unif_regs: Default::default(),
     }
     .lower()
 }
