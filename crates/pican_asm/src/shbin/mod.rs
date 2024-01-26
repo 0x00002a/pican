@@ -14,7 +14,7 @@ use pican_core::{
     register::{Register, RegisterKind},
 };
 
-use self::instruction::{Instruction, OperandDescriptor};
+use self::instruction::{ComponentMask, Instruction, OperandDescriptor};
 
 use super::float24::Float24;
 
@@ -238,6 +238,11 @@ impl BinSize for NullString {
 impl<T: BinSize> OffsetTable<T> {
     fn add_offset(&self) -> usize {
         self.data.iter().map(|d| d.bin_size()).sum()
+    }
+}
+impl<T> From<Vec<T>> for OffsetTable<T> {
+    fn from(value: Vec<T>) -> Self {
+        Self { data: value }
     }
 }
 
@@ -470,8 +475,8 @@ pub struct OutputRegisterEntry {
     #[brw(pad_after = 1)]
     pub ty: OutputProperty,
     pub register_id: u16,
-    #[brw(pad_after = 2)]
-    pub output_mask: SwizzleMask,
+    #[brw(pad_after = 3)]
+    pub output_mask: ComponentMask,
 }
 
 impl BinSize for OutputRegisterEntry {
@@ -479,10 +484,6 @@ impl BinSize for OutputRegisterEntry {
         0x8
     }
 }
-
-#[binrw]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SwizzleMask(u16);
 
 #[binrw]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

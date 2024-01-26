@@ -15,11 +15,17 @@ use crate::ir::SwizzleDims;
 const OPCODE_OFFSET: u32 = 0x1a;
 
 #[bitfield(filled = false)]
-#[derive(Debug, BitfieldSpecifier)]
+#[derive(Debug, BitfieldSpecifier, Clone, Copy, PartialEq, Eq, BinRead, BinWrite)]
+#[br(try_map = Self::from_bytes)]
+#[bw(map = |&x| Self::into_bytes(x))]
 pub struct ComponentMask {
+    #[bits = 1]
     w: bool,
+    #[bits = 1]
     z: bool,
+    #[bits = 1]
     y: bool,
+    #[bits = 1]
     x: bool,
 }
 impl From<SwizzleDims> for ComponentMask {
