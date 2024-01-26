@@ -47,8 +47,8 @@ impl LowerCtx {
                 .with_s1(operands[1].swizzle.into())
                 .with_s2(operands[2].swizzle.into())
         };
-        let resolve_reg = |idx| {
-            match operands[0].register.kind {
+        let resolve_reg = |idx: usize| {
+            match operands[idx].register.kind {
                 ir::RegHoleKind::Fixed(f) => f,
                 ir::RegHoleKind::Free(_) => panic!("found free register at operand index {idx}, did the register allocation pass not run?"),
             }
