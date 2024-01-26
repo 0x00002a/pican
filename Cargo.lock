@@ -360,6 +360,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pican_disam"
+version = "0.1.0"
+dependencies = [
+ "binrw",
+ "pican_asm",
+]
+
+[[package]]
 name = "pican_frontend"
 version = "0.1.0"
 dependencies = [
