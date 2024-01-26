@@ -102,7 +102,10 @@ impl LowerCtx {
             shi::InstructionFormatKind::Four => todo!(),
             shi::InstructionFormatKind::Five => todo!(),
             shi::InstructionFormatKind::FiveI => todo!(),
-            shi::InstructionFormatKind::Zero => todo!(),
+            shi::InstructionFormatKind::Zero => {
+                assert_eq!(operands.len(), 0);
+                shi::Operands::Zero
+            }
             shi::InstructionFormatKind::Unknown => todo!(),
         }
     }
