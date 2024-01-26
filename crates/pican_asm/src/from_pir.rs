@@ -76,18 +76,22 @@ impl RegCache {
 }
 
 #[derive(Default)]
-struct FreeUnifRegisters {
+struct FreeRegTracker {
     next_bool: usize,
     next_int: usize,
     next_float: usize,
+    next_input: usize,
+    next_output: usize,
 }
-impl FreeUnifRegisters {
+impl FreeRegTracker {
     fn allocate(&mut self, kind: RegisterKind) -> Option<Register> {
         let next = match kind {
             RegisterKind::FloatingVecUniform => &mut self.next_float,
             RegisterKind::IntegerVecUniform => &mut self.next_int,
             RegisterKind::BoolUniform => &mut self.next_bool,
-            _ => unreachable!(),
+            RegisterKind::Input => &mut self.next_input,
+            RegisterKind::Output => &mut self.next_output,
+            RegisterKind::Scratch => unreachable!(),
         };
         if *next > kind.max_index() {
             None
@@ -127,7 +131,7 @@ struct LowerCtx<'a, 'm, 'c> {
     diag: &'c Diagnostics,
     regs: RegCache,
     ident_to_reg: HashMap<Ident<'a>, RegHole>,
-    unif_regs: FreeUnifRegisters,
+    unif_regs: FreeRegTracker,
 }
 impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
     fn lower_register(&mut self, r: Register) -> RegHole {
@@ -225,7 +229,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                         pican_pir::ty::UniformTy::Integer => RegisterKind::IntegerVecUniform,
                         pican_pir::ty::UniformTy::Float => RegisterKind::FloatingVecUniform,
                     };
-                    let reg = self.unif_regs.allocate_diag(kind, &self.diag, &value)?;
+                    let reg = self.unif_regs.allocate_diag(kind, self.diag, &value)?;
                     let r = self.lower_register(reg);
                     self.ident_to_reg.insert(name, r);
                     let name = self.asm_ctx.define_symbol(name);
@@ -302,7 +306,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                         self.lower_register(r)
                     } else {
                         let reg = self.unif_regs.allocate_diag(
-                            RegisterKind::FloatingVecUniform,
+                            RegisterKind::Output,
                             self.diag,
                             &value,
                         )?;

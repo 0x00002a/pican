@@ -155,6 +155,7 @@ impl LowerCtx {
     }
 
     fn lower_instr(&mut self, i: ir::Instruction) -> shi::Instruction {
+        println!("i: {i:#?}\n");
         let operands = self.convert_operands(&i.operands, i.opcode.instruction_format());
         shi::Instruction {
             opcode: i.opcode,
