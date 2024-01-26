@@ -1,3 +1,5 @@
+use pican_core::ir::Float;
+
 /// 24-bit floating-point representation used by the PICA200
 ///
 /// This is a container for the floating point representation used
@@ -62,6 +64,9 @@ fn split_up_float(v: f32) -> FloatParts {
 impl Float24 {
     /// Attempt to convert an f32
     pub fn try_from_f32(v: f32) -> Result<Self, F32ToF24ConversionError> {
+        if v == 0.0 {
+            return Ok(Self([0, 0, 0]));
+        }
         let FloatParts { sign, exp, mant } = split_up_float(v);
 
         // target layout is <sign:1><exp:7><mant:16>
@@ -101,9 +106,26 @@ impl Float24 {
         f32::from_le_bytes(((sign << 31) | ((to_exp as u32) << 23) | mant).to_le_bytes())
     }
 }
+impl TryFrom<f32> for Float24 {
+    type Error = F32ToF24ConversionError;
+
+    fn try_from(value: f32) -> Result<Self, Self::Error> {
+        Self::try_from_f32(value)
+    }
+}
+
+impl TryFrom<Float> for Float24 {
+    type Error = F32ToF24ConversionError;
+
+    fn try_from(value: Float) -> Result<Self, Self::Error> {
+        Self::try_from_f32(value.into_inner())
+    }
+}
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
+
     use crate::float24::{split_up_float, Float24};
 
     #[test]
@@ -131,5 +153,9 @@ mod tests {
         check_roundtrips(1.);
         check_roundtrips(0.25);
         check_roundtrips(-0.25);
+    }
+    #[test]
+    fn f24_from_zero() {
+        assert_matches!(Float24::try_from_f32(0.0), Ok(_));
     }
 }
