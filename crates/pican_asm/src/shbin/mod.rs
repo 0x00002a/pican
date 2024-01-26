@@ -102,8 +102,10 @@ pub struct Dvlp {
     #[br(args { header_start: start, inner: () })]
     #[bw(args { offset: (compiled_blob.bin_size()) as u64 + DVLP_HEADER_SZ })]
     pub operand_desc_table: OffsetTable<OperandDescriptor>,
-    #[bw(assert(s.stream_position().unwrap() == 24))]
-    pub rest: [u32; 4],
+    #[bw(assert(s.stream_position().unwrap() == 24), calc = DVLP_HEADER_SZ as u32 + compiled_blob.bin_size() as u32 + operand_desc_table.data.iter().map(|b| b.bin_size()).sum::<usize>() as u32)]
+    #[br(temp)]
+    _unk1_sym_offset: u32,
+    pub rest: [u32; 3],
     #[br(ignore)]
     #[bw(calc = compiled_blob.deref().clone(), assert(s.stream_position().unwrap() == DVLP_HEADER_SZ))]
     compiled_blob_data: Vec<Instruction>,
@@ -130,6 +132,12 @@ impl BinSize for u32 {
 impl BinSize for u8 {
     fn bin_size(&self) -> usize {
         1
+    }
+}
+
+impl BinSize for OperandDescriptor {
+    fn bin_size(&self) -> usize {
+        8
     }
 }
 
