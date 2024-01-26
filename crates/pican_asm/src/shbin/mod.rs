@@ -25,7 +25,7 @@ const DVLP_HEADER_SZ: u64 = 0x28;
 #[binread]
 #[doc(alias = "DVLB")]
 #[br(magic = b"DVLB", stream = s)]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct Shbin {
     #[br(temp)]
     pub dvle_count: u32,
@@ -36,6 +36,14 @@ pub struct Shbin {
     #[br(parse_with = binrw::file_ptr::parse_from_iter(dvle_offsets.iter().copied()), seek_before(SeekFrom::Start(0)))]
     pub dvles: Vec<ExecutableSection>,
 }
+impl Shbin {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut c = Cursor::new(Vec::new());
+        c.write_type(self, binrw::Endian::Little).unwrap();
+        c.into_inner()
+    }
+}
+
 impl BinWrite for Shbin {
     type Args<'a> = ();
 
@@ -85,7 +93,7 @@ impl BinWrite for Shbin {
 
 #[binrw]
 #[brw(magic = b"DVLP", stream = s, import(start: u64))]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct Dvlp {
     _mversion: u32,
     #[br(args { header_start: start, inner: () })]
@@ -246,7 +254,7 @@ impl<T> From<Vec<T>> for OffsetTable<T> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, BinRead, BinWrite)]
+#[derive(Clone, Debug, PartialEq, Eq, BinRead, BinWrite, Default)]
 #[br(import_raw(args: OffsetTableArgs<()>))]
 #[bw(import_raw(args: OffsetTableWriteArgs))]
 pub struct ShaderBlob(
@@ -552,21 +560,4 @@ pub enum ShaderType {
     Vertex,
     #[brw(magic = 1u8)]
     Geometry,
-}
-
-#[cfg(test)]
-mod tests {
-    use std::io::Cursor;
-
-    use binrw::{BinReaderExt, BinWrite};
-
-    use super::Shbin;
-    #[allow(non_snake_case)]
-    #[cfg(feature = "picasso_match_tests")]
-    mod picasso_match {
-        use super::*;
-        use pretty_assertions::assert_eq;
-
-        include!(concat!(env!("OUT_DIR"), "/picasso_match_tests.rs"));
-    }
 }

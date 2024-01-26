@@ -83,6 +83,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "assert_matches"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -369,6 +375,7 @@ name = "pican_asm"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "assert_matches",
  "binrw",
  "glob",
  "modular-bitfield",
@@ -624,12 +631,17 @@ dependencies = [
 name = "test_cases"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "binrw",
  "codespan-reporting",
  "glob",
+ "pican_asm",
  "pican_core",
  "pican_frontend",
  "pican_pir",
  "pican_ty",
+ "pretty_assertions",
+ "quote",
 ]
 
 [[package]]

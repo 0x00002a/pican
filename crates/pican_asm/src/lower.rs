@@ -2,23 +2,32 @@ use std::ops::Range;
 
 use crate::{
     context::AsmContext,
+    float24::Float24,
     instrs::{InstructionOffset, InstructionPack},
-    ir::{self, SwizzleDims},
+    ir::{self, RegisterId, SwizzleDims},
     shbin::{
         self,
         instruction::{OpCodeInstructionFormat, OperandDescriptor},
-        ConstantTableEntry, ExecutableSection, ExecutableSectionHeader,
+        ConstantTableEntry, ExecutableSection, ExecutableSectionHeader, Shbin,
     },
 };
 
-use pican_core::{copy_arrayvec::CopyArrayVec, ir::SwizzleDim};
+use pican_core::{
+    copy_arrayvec::CopyArrayVec,
+    ir::SwizzleDim,
+    register::{Register, RegisterKind, RegisterType},
+};
 use shbin::instruction as shi;
+
+pub fn lower_to_shbin(ctx: &AsmContext, instrs: &InstructionPack) -> shbin::Shbin {
+    LowerCtx::default().lower_module(ctx, instrs)
+}
 
 pub const MAX_SHBIN_DESCRIPTORS: usize = 128;
 
+#[derive(Default)]
 struct LowerCtx {
     descriptors: CopyArrayVec<shi::OperandDescriptor, MAX_SHBIN_DESCRIPTORS>,
-    out: shbin::Shbin,
 }
 impl LowerCtx {
     fn add_desc(&mut self, desc: OperandDescriptor) -> u8 {
@@ -105,13 +114,19 @@ impl LowerCtx {
             operands,
         }
     }
-    fn lower_module(mut self, mctx: &AsmContext, code: &InstructionPack) {
+    fn lower_module(mut self, mctx: &AsmContext, code: &InstructionPack) -> shbin::Shbin {
+        let mut out = Shbin::default();
         for instr in code.iter() {
             let i = self.lower_instr(instr);
-            self.out.dvlp.compiled_blob.push(i);
+            out.dvlp.compiled_blob.push(i);
         }
         if let Some(main) = mctx.main_proc() {
-            let mut section = ExecutableSection {
+            let find_alloc_reg = |id: &RegisterId| {
+                mctx.allocated_registers
+                    .get(id)
+                    .expect("found unallocated constant, did register allocation not happen?")
+            };
+            out.dvles.push(ExecutableSection {
                 header: ExecutableSectionHeader {
                     shader_ty: shbin::ShaderType::Vertex,
                     merge_vertex_geo: 0,
@@ -124,17 +139,66 @@ impl LowerCtx {
                     fully_defined_verts_variable: 0,
                     fully_defined_verts_fixed: 0,
                 },
-                constant_table: Default::default(),
+                constant_table: mctx
+                    .constants
+                    .iter()
+                    .map(|(r, c)| {
+                        let r = find_alloc_reg(r);
+                        let register_id = r.index.try_into().unwrap();
+                        #[track_caller]
+                        fn check_ty(r: RegisterKind, e: RegisterKind) {
+                            assert_eq!(r, e, "wrong register type allocated for constant");
+                        }
+                        match c {
+                            crate::context::ConstantUniform::IVec(i) => {
+                                check_ty(r.kind, RegisterKind::IntegerVecUniform);
+                                ConstantTableEntry::IVec4 {
+                                    register_id,
+                                    x: i.x,
+                                    y: i.y,
+                                    z: i.z,
+                                    w: i.w,
+                                }
+                            }
+                            crate::context::ConstantUniform::FVec(f) => {
+                                check_ty(r.kind, RegisterKind::FloatingVecUniform);
+                                ConstantTableEntry::Vec4 {
+                                    register_id,
+                                    x: f.x,
+                                    y: f.y,
+                                    z: f.z,
+                                    w: f.w,
+                                }
+                            }
+                            crate::context::ConstantUniform::Bool(_) => todo!(),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .into(),
                 label_table: Default::default(),
-                output_register_table: Default::default(),
+                output_register_table: mctx
+                    .outputs
+                    .iter()
+                    .map(|o| {
+                        let register_id = find_alloc_reg(&o.register).index.try_into().unwrap();
+                        shbin::OutputRegisterEntry {
+                            ty: o.property,
+                            register_id,
+                            // todo
+                            output_mask: Default::default(),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .into(),
                 uniform_table: Default::default(),
                 symbol_table: Default::default(),
-            };
-            //self.out.dvles.push();
+            });
         } else {
             // todo: add logging and warn here instead
             eprintln!("no main found");
         }
+        out.dvlp.operand_desc_table = self.descriptors.iter().copied().collect::<Vec<_>>().into();
+        out
     }
 }
 impl From<Option<SwizzleDims>> for shi::ComponentMask {

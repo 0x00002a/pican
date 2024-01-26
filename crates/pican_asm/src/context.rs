@@ -1,18 +1,23 @@
 use std::{collections::HashMap, ops::Range};
 
-use pican_core::ir::{Float, Ident};
+use pican_core::{
+    ir::{Float, Ident},
+    properties::OutputProperty,
+    register::Register,
+};
 use string_interner::StringInterner;
 
 use crate::{
+    float24::Float24,
     instrs::InstructionOffset,
     ir::{ProcId, RegisterId, Vec4},
-    shbin::IoRegisterBitMask,
+    shbin::{instruction::ComponentMask, IoRegisterBitMask},
 };
 
 #[derive(Debug)]
 pub enum ConstantUniform {
     IVec(Vec4<i8>),
-    FVec(Vec4<Float>),
+    FVec(Vec4<Float24>),
     Bool(bool),
 }
 
@@ -28,11 +33,19 @@ pub type SymbolId = string_interner::DefaultSymbol;
 pub struct Symbols {
     syms: StringInterner,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutputInfo {
+    pub property: OutputProperty,
+    pub register: RegisterId,
+    pub mask: ComponentMask,
+}
 
 #[derive(Debug, Default)]
 pub struct AsmContext {
     /// Register -> Constant lookup
     pub constants: HashMap<RegisterId, ConstantUniform>,
+    pub allocated_registers: HashMap<RegisterId, Register>,
+    pub outputs: Vec<OutputInfo>,
     procs: HashMap<ProcId, ProcInfo>,
     symbols: Symbols,
     main: Option<ProcId>,

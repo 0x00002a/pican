@@ -6,6 +6,8 @@ use codespan_reporting::{
 use pican_core::span::FileId;
 
 mod all_programs_compile;
+mod picasso_conformance;
+mod picasso_roundtrips;
 
 fn print_diagnostics<'a>(
     diags: &[codespan_reporting::diagnostic::Diagnostic<FileId>],

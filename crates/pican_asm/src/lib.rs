@@ -8,3 +8,6 @@ pub mod lower;
 pub mod shbin;
 
 pub const MAX_SHBIN_INSTRUCTIONS: usize = 512;
+
+#[cfg(test)]
+mod tests {}

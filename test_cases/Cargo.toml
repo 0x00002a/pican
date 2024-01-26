@@ -10,7 +10,12 @@ pican_pir = { path = "../crates/pican_pir", version = "0.1.0" }
 pican_core = { path = "../crates/pican_core", version = "0.1.0" }
 pican_frontend = { path = "../crates/pican_frontend", version = "0.1.0" }
 pican_ty = { path = "../crates/pican_ty", version = "0.1.0" }
+pican_asm = { path = "../crates/pican_asm", version = "0.1.0" }
 codespan-reporting = "0.11.1"
+binrw = "0.13.3"
+pretty_assertions = "1.4.0"
 
 [build-dependencies]
 glob = "0.3.1"
+quote = "1.0.35"
+anyhow = "1.0.79"

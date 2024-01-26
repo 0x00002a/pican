@@ -41,6 +41,9 @@ impl Float {
             None
         }
     }
+    pub fn into_inner(self) -> f32 {
+        self.0
+    }
 }
 impl std::hash::Hash for Float {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
