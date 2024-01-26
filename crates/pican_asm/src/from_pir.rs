@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use pican_core::{
     context::PicanContext,
     diagnostics::{DiagnosticBuilder, Diagnostics, FatalErrorEmitted},
-    ir::{Float, Ident, IrNode, SwizzleDims},
+    ir::{Float, HasSpan, Ident, IrNode, SwizzleDims},
     register::{Register, RegisterKind},
 };
 use pican_pir::{
@@ -96,6 +96,25 @@ impl FreeUnifRegisters {
             *next += 1;
             Some(r)
         }
+    }
+
+    fn allocate_diag(
+        &mut self,
+        kind: RegisterKind,
+        diag: &Diagnostics,
+        span: &impl HasSpan,
+    ) -> Result<Register, FatalErrorEmitted> {
+        self.allocate(kind).ok_or_else(|| {
+            diag.fatal::<()>(
+                DiagnosticBuilder::error()
+                    .at(span)
+                    .primary(
+                        "sorry but I've run out of available registers for this type of uniform",
+                    )
+                    .build(),
+            )
+            .unwrap_err()
+        })
     }
 }
 
@@ -206,16 +225,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                         pican_pir::ty::UniformTy::Integer => RegisterKind::IntegerVecUniform,
                         pican_pir::ty::UniformTy::Float => RegisterKind::FloatingVecUniform,
                     };
-                    let reg = self.unif_regs.allocate(kind).ok_or_else(|| {
-                        self.diag
-                            .fatal::<()>(
-                                DiagnosticBuilder::error()
-                                    .at(&value)
-                                    .primary("sorry but I've run out of available registers for this type of uniform")
-                                    .build(),
-                            )
-                            .unwrap_err()
-                    })?;
+                    let reg = self.unif_regs.allocate_diag(kind, &self.diag, &value)?;
                     let r = self.lower_register(reg);
                     self.ident_to_reg.insert(name, r);
                     let name = self.asm_ctx.define_symbol(name);
@@ -225,73 +235,64 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                         end_register: reg,
                     })
                 }
-                pican_pir::bindings::BindingValue::Constant(c) => match c {
-                    pican_pir::ir::ConstantUniform::Integer(i) => {
-                        let i = i.get();
-                        let id = self.regs.next_reg_id();
-                        let conv_i =
-                            |i: IrNode<i32>| -> Result<i8, FatalErrorEmitted> {
+                pican_pir::bindings::BindingValue::Constant(c) => {
+                    let (kind, v) = match c {
+                        pican_pir::ir::ConstantUniform::Integer(i) => {
+                            let i = i.get();
+                            let conv_i = |i: IrNode<i32>| -> Result<i8, FatalErrorEmitted> {
                                 i.into_inner().try_into().map_err(|_| {
                                     self.diag.fatal::<()>(DiagnosticBuilder::error().at(&i).primary(
                                         "integer too large, it must fit in an 8-bit signed",
                                     ).build()).unwrap_err()
                                 })
                             };
-                        self.asm_ctx.define_constant(
-                            id,
-                            crate::context::ConstantUniform::IVec(Vec4::new(
-                                conv_i(i[0])?,
-                                conv_i(i[1])?,
-                                conv_i(i[2])?,
-                                conv_i(i[3])?,
-                            )),
-                        );
-                        self.ident_to_reg.insert(
-                            name,
-                            RegHole {
-                                id,
-                                kind: RegHoleKind::Free(FreeRegister {
-                                    kind: RegisterKind::IntegerVecUniform,
-                                }),
-                            },
-                        );
-                    }
-                    pican_pir::ir::ConstantUniform::Float(i) => {
-                        let i = i.get();
-                        let id = self.regs.next_reg_id();
-                        let conv_f = |i: IrNode<Float>| -> Result<Float24, FatalErrorEmitted> {
-                            i.into_inner().try_into().map_err(|e| {
-                                self.diag
-                                    .fatal::<()>(
-                                        DiagnosticBuilder::error()
-                                            .at(&i)
-                                            .primary(format!("float doesn't fit in gpu format {e}"))
-                                            .build(),
-                                    )
-                                    .unwrap_err()
-                            })
-                        };
-                        self.asm_ctx.define_constant(
-                            id,
-                            crate::context::ConstantUniform::FVec(Vec4::new(
-                                conv_f(i[0])?,
-                                conv_f(i[1])?,
-                                conv_f(i[2])?,
-                                conv_f(i[3])?,
-                            )),
-                        );
-                        self.ident_to_reg.insert(
-                            name,
-                            RegHole {
-                                id,
-                                kind: RegHoleKind::Free(FreeRegister {
-                                    kind: RegisterKind::IntegerVecUniform,
-                                }),
-                            },
-                        );
-                    }
-                    pican_pir::ir::ConstantUniform::FloatArray(_) => todo!(),
-                },
+                            (
+                                RegisterKind::IntegerVecUniform,
+                                crate::context::ConstantUniform::IVec(Vec4::new(
+                                    conv_i(i[0])?,
+                                    conv_i(i[1])?,
+                                    conv_i(i[2])?,
+                                    conv_i(i[3])?,
+                                )),
+                            )
+                        }
+                        pican_pir::ir::ConstantUniform::Float(i) => {
+                            let i = i.get();
+                            let conv_f = |i: IrNode<Float>| -> Result<Float24, FatalErrorEmitted> {
+                                i.into_inner().try_into().map_err(|e| {
+                                    self.diag
+                                        .fatal::<()>(
+                                            DiagnosticBuilder::error()
+                                                .at(&i)
+                                                .primary(format!(
+                                                    "float doesn't fit in gpu format {e}"
+                                                ))
+                                                .build(),
+                                        )
+                                        .unwrap_err()
+                                })
+                            };
+                            (
+                                RegisterKind::FloatingVecUniform,
+                                crate::context::ConstantUniform::FVec(Vec4::new(
+                                    conv_f(i[0])?,
+                                    conv_f(i[1])?,
+                                    conv_f(i[2])?,
+                                    conv_f(i[3])?,
+                                )),
+                            )
+                        }
+                        pican_pir::ir::ConstantUniform::FloatArray(_) => todo!(),
+                    };
+
+                    let id = self.regs.next_reg_id();
+                    self.asm_ctx.define_constant(id, v);
+
+                    let reg = self.unif_regs.allocate_diag(kind, self.diag, &value)?;
+                    self.asm_ctx.allocated_registers.insert(id, reg);
+                    let r = self.lower_register(reg);
+                    self.ident_to_reg.insert(name, r);
+                }
                 pican_pir::bindings::BindingValue::OutputProperty(o) => {
                     assert!(o.alias.is_some());
 
