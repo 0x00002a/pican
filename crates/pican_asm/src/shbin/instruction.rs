@@ -89,22 +89,26 @@ impl std::fmt::Display for ComponentSelector {
 #[bitfield(filled = false)]
 #[derive(Debug, BitfieldSpecifier)]
 pub struct OperandSource {
+    #[bits = 1]
     negate: bool,
+    #[bits = 8]
     selector: ComponentSelector,
 }
 
-#[bitfield(bytes = 4)]
+#[bitfield(bytes = 8)]
 #[binrw]
+#[brw(little)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[br(map(Self::from_bytes))]
-#[bw(map(|x: &Self| x.into_bytes()))]
 pub struct OperandDescriptor {
+    #[bits = 4]
     destination_mask: ComponentMask,
+    #[bits = 9]
     s1: OperandSource,
+    #[bits = 9]
     s2: OperandSource,
+    #[bits = 9]
     s3: OperandSource,
-    #[skip]
-    __: B1,
+    _unknown: B33,
 }
 
 #[bitfield]
@@ -239,6 +243,7 @@ impl Instruction {
     }
 
     pub fn to_asm(&self, operands: &[OperandDescriptor]) -> String {
+        let lookup_pat = |desc| &operands[(desc) as usize];
         let operands = match self.operands {
             Operands::TwoArguments {
                 dst,
@@ -247,7 +252,7 @@ impl Instruction {
                 desc,
                 ..
             } => {
-                let pattern = &operands[desc as usize];
+                let pattern = lookup_pat(desc);
                 println!("desc: {desc:02X}, {pattern:?}");
                 format!(
                     "{}{}, {}{}{}, {}{}{}",
@@ -262,7 +267,7 @@ impl Instruction {
                 )
             }
             Operands::OneArgument { dst, src1, desc } => {
-                let pattern = &operands[desc as usize];
+                let pattern = lookup_pat(desc);
                 format!(
                     "{dst}{}, {}{src1}{}",
                     pattern.destination_mask(),
@@ -278,7 +283,7 @@ impl Instruction {
                 src3,
                 desc: Some(desc),
             } => {
-                let pattern = &operands[desc as usize];
+                let pattern = lookup_pat(desc);
                 format!(
                     "{dst}{}, {}{src1}{}, {}{src2}{}, {}{src3}{}",
                     pattern.destination_mask(),
