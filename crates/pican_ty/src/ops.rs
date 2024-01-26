@@ -127,10 +127,10 @@ pub fn slots_for_opcode(op: OpCode) -> OperandSlots {
                 allowed_types: &[OperandTy::SrcReg],
             },
             OperandSlot {
-                allowed_types: &[OperandTy::SrcReg, OperandTy::WideSrc],
+                allowed_types: &[OperandTy::WideSrc],
             },
             OperandSlot {
-                allowed_types: &[OperandTy::SrcReg, OperandTy::WideSrc],
+                allowed_types: &[OperandTy::SrcReg],
             },
         ]),
         OpCode::DphI => todo!(),
@@ -138,7 +138,20 @@ pub fn slots_for_opcode(op: OpCode) -> OperandSlots {
         OpCode::SgeI => todo!(),
         OpCode::SltI => todo!(),
         OpCode::Loop => todo!(),
-        OpCode::MadI => todo!(),
+        OpCode::MadI => OperandSlots::new(&[
+            OperandSlot {
+                allowed_types: &[OperandTy::DstReg],
+            },
+            OperandSlot {
+                allowed_types: &[OperandTy::SrcReg],
+            },
+            OperandSlot {
+                allowed_types: &[OperandTy::SrcReg],
+            },
+            OperandSlot {
+                allowed_types: &[OperandTy::WideSrc],
+            },
+        ]),
         OpCode::Unknown => todo!(),
     }
 }
