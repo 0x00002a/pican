@@ -747,8 +747,8 @@ instructs! {
     ControlFlow { } = Two InstructionFormat2 { condop => cond, dst_offset => dst_offset, num => num, refx => refx, refy => refy },
     ControlFlowConstant {} = Three InstructionFormat3 { dst_offset => dst_offset, num => num, const_id => constant_id },
     SetEmit {} = Four InstructionFormat4 { winding => winding, vtxid => vtxid, primemit => primemit },
-    Mad { inverse: true } = Five InstructionFormat5 { src1 => src1, src2 => src2, src3 => src3, idx2 => adx, dst => dst, desc => desc },
-    Mad { inverse: false } = FiveI InstructionFormat5I { src1 => src1, src2 => src2, src3 => src3, idx3 => adx, dst => dst, desc => desc },
+    Mad { inverse: false } = Five InstructionFormat5 { src1 => src1, src2 => src2, src3 => src3, idx2 => adx, dst => dst, desc => desc },
+    Mad { inverse: true } = FiveI InstructionFormat5I { src1 => src1, src2 => src2, src3 => src3, idx3 => adx, dst => dst, desc => desc },
 }
 
 #[cfg(test)]
