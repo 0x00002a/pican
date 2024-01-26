@@ -1,4 +1,4 @@
-use std::io::{Cursor, Seek, Write};
+use std::io::{Seek, Write};
 
 use binrw::{binrw, BinRead, BinReaderExt, BinWrite, BinWriterExt};
 use modular_bitfield::prelude::*;
@@ -6,13 +6,8 @@ use pican_core::{
     ops::OpCode,
     register::{Register, RegisterKind},
 };
-use serde::de::IntoDeserializer;
 use strum::EnumDiscriminants;
 use typesum::sumtype;
-
-use crate::ir::RegisterId;
-
-use super::RegisterIndex;
 
 #[bitfield(filled = false)]
 #[derive(Debug, BitfieldSpecifier)]
@@ -95,10 +90,9 @@ pub struct OperandSource {
     selector: ComponentSelector,
 }
 
-#[bitfield(bytes = 8)]
-#[binrw]
+#[bitfield(bits = 64)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, BinRead, BinWrite)]
 #[brw(little)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OperandDescriptor {
     #[bits = 4]
     destination_mask: ComponentMask,
@@ -112,7 +106,7 @@ pub struct OperandDescriptor {
     _unknown: B33,
 }
 
-#[bitfield]
+#[bitfield(bits = 32)]
 #[derive(Debug, BinWrite, BinRead)]
 pub struct InstructionFormat1 {
     desc: B7,
@@ -120,10 +114,11 @@ pub struct InstructionFormat1 {
     src1: B7,
     idx1: B2,
     dst: B5,
+    #[allow(unused)] // clippy can't work out that we write this for some reason
     opc: B6,
 }
 
-#[bitfield]
+#[bitfield(bits = 32)]
 #[derive(Debug, BinWrite, BinRead)]
 pub struct InstructionFormat1U {
     desc: B7,
@@ -132,10 +127,11 @@ pub struct InstructionFormat1U {
     src1: B7,
     idx1: B2,
     dst: B5,
+    #[allow(unused)] // clippy can't work out that we write this for some reason
     opc: B6,
 }
 
-#[bitfield]
+#[bitfield(bits = 32)]
 #[derive(Debug, BinWrite, BinRead)]
 pub struct InstructionFormat1I {
     desc: B7,
@@ -143,10 +139,11 @@ pub struct InstructionFormat1I {
     src1: B5,
     idx2: B2,
     dst: B5,
+    #[allow(unused)] // clippy can't work out that we write this for some reason
     opc: B6,
 }
 
-#[bitfield]
+#[bitfield(bits = 32)]
 #[derive(Debug, BinWrite, BinRead)]
 pub struct InstructionFormat1C {
     desc: B7,
@@ -155,10 +152,11 @@ pub struct InstructionFormat1C {
     idx1: B2,
     cmpy: B3,
     cmpx: B3,
+    #[allow(unused)] // clippy can't work out that we write this for some reason
     opc: B5,
 }
 
-#[bitfield]
+#[bitfield(bits = 32)]
 #[derive(Debug, BinWrite, BinRead)]
 pub struct InstructionFormat2 {
     num: B8,
@@ -168,10 +166,11 @@ pub struct InstructionFormat2 {
     condop: B2,
     refy: B1,
     refx: B1,
+    #[allow(unused)] // clippy can't work out that we write this for some reason
     opc: B6,
 }
 
-#[bitfield]
+#[bitfield(bits = 32)]
 #[derive(Debug, BinWrite, BinRead)]
 pub struct InstructionFormat3 {
     num: B8,
@@ -179,10 +178,11 @@ pub struct InstructionFormat3 {
     __: B2,
     dst_offset: B12,
     const_id: B4,
+    #[allow(unused)] // clippy can't work out that we write this for some reason
     opc: B6,
 }
 
-#[bitfield(bytes = 4)]
+#[bitfield(bits = 32)]
 #[derive(Debug, BinWrite, BinRead)]
 pub struct InstructionFormat4 {
     #[skip]
@@ -190,10 +190,11 @@ pub struct InstructionFormat4 {
     winding: B1,
     primemit: B1,
     vtxid: B2,
+    #[allow(unused)] // clippy can't work out that we write this for some reason
     opc: B6,
 }
 
-#[bitfield]
+#[bitfield(bits = 32)]
 #[derive(Debug, BinWrite, BinRead)]
 pub struct InstructionFormat5 {
     desc: B5,
@@ -202,10 +203,11 @@ pub struct InstructionFormat5 {
     src1: B5,
     idx2: B2,
     dst: B5,
+    #[allow(unused)] // clippy can't work out that we write this for some reason
     opc: B3,
 }
 
-#[bitfield]
+#[bitfield(bits = 32)]
 #[derive(Debug, BinWrite, BinRead)]
 pub struct InstructionFormat5I {
     desc: B5,
@@ -214,6 +216,7 @@ pub struct InstructionFormat5I {
     src1: B5,
     idx3: B2,
     dst: B5,
+    #[allow(unused)] // clippy can't work out that we write this for some reason
     opc: B3,
 }
 
@@ -264,7 +267,9 @@ impl Instruction {
                     pattern.s2().selector(),
                 )
             }
-            Operands::OneArgument { dst, src1, desc } => {
+            Operands::OneArgument {
+                dst, src1, desc, ..
+            } => {
                 let pattern = lookup_pat(desc);
                 format!(
                     "{dst}{}, {}{src1}{}",
@@ -279,7 +284,8 @@ impl Instruction {
                 src1,
                 src2,
                 src3,
-                desc: Some(desc),
+                desc,
+                ..
             } => {
                 let pattern = lookup_pat(desc);
                 format!(
@@ -293,7 +299,6 @@ impl Instruction {
                     pattern.s3().selector(),
                 )
             }
-            Operands::Mad { desc: None, .. } => todo!(),
             Operands::Cmp { .. } => todo!(),
             Operands::SetEmit { .. } => todo!(),
             Operands::ControlFlow { .. } => todo!(),
@@ -320,20 +325,6 @@ macro_rules! instruct_rec {
     };
     ($v:ident, $t:ident: $d:ident) => {
         paste::paste! { $v.[<set_ $t>]($d) }
-    };
-}
-macro_rules! operand_rec {
-    ($v:ident, dst: $d:ident) => {
-        v.dst()
-    };
-    ($v:ident, src1: $s:ident) => {
-        $v.set_src1(src_idx($s))
-    };
-    ($v:ident, src2: $s:ident) => {
-        $v.set_src2(src_idx($s))
-    };
-    ($v:ident, desc: $d:ident) => {
-        $v.set_desc($d)
     };
 }
 
@@ -416,20 +407,6 @@ macro_rules! instructs {
                         $(let $vtt = map_vtn!(o.$vtn(), $vtn);)*
                         $from :: $f { $($v: $c,)* $($vtt,)* }
                     },)*
-                    $to::Five(o) => Operands::Mad {
-                        dst:  Instruction::dst_to_register(o.dst()),
-                        src1: Instruction::src_to_register(o.src1()),
-                        src2: Instruction::src_to_register(o.src2()),
-                        src3: Instruction::src_to_register(o.src3()),
-                        desc: Some(o.desc()),
-                    },
-                    $to::FiveI(o) => Operands::Mad {
-                        dst:  Instruction::dst_to_register(o.dst()),
-                        src1: Instruction::src_to_register(o.src1()),
-                        src2: Instruction::src_to_register(o.src2()),
-                        src3: Instruction::src_to_register(o.src3()),
-                        desc: None,
-                    },
                     $to::Zero => $from::Zero,
                     $to::Unknown => $from::Unknown,
                 }
@@ -440,24 +417,6 @@ macro_rules! instructs {
             fn from(t: $from) -> Self {
                 match t {
                     $( $from::$f { $($v: $c,)* $($vtt,)* } => instruct! ( $armty { $($vtn: $vtt),* } ),)*
-                    $from::Mad {
-                        dst,
-                        src1,
-                        src2,
-                        src3,
-                        desc: Some(desc),
-                    } => {
-                        instruct!(InstructionFormat5 { dst: dst, src1: src1, src2: src2, src3: src3, desc: desc })
-                    },
-                    $from::Mad {
-                        dst,
-                        src1,
-                        src2,
-                        src3,
-                        desc: None,
-                    } => {
-                        instruct!(InstructionFormat5I { dst: dst, src1: src1, src2: src2, src3: src3 })
-                    },
                     $from::Zero => $to::Zero,
                     $from::Unknown => $to::Unknown,
                 }
@@ -466,12 +425,13 @@ macro_rules! instructs {
         impl $to {
             fn $set_opcode(&mut self, op: OpCode) {
                 let op = op.bin_id();
+                #[allow(unreachable_patterns)]
                 match self {
+                    $to::Five(o) => o.set_opc(op >> 3),
+                    $to::FiveI(o) => o.set_opc(op >> 3),
                     $( $to::$arm (o) => {
                         o.set_opc(op)
                     },)*
-                    $to::Five(o) => o.set_opc(op >> 3),
-                    $to::FiveI(o) => o.set_opc(op >> 3),
                     _ => {},
                 }
             }
@@ -485,11 +445,13 @@ instructs! {
     set_opcode,
     TwoArguments { inverse: false } = One InstructionFormat1 { dst => dst, src1 => src1, src2 => src2, desc => desc, idx1 => relative_offset },
     TwoArguments { inverse: true } = OneI InstructionFormat1I { dst => dst, src1 => src1, src2 => src2, desc => desc, idx2 => relative_offset },
-    OneArgument { } = OneU InstructionFormat1U { dst => dst, src1 => src1, desc => desc },
-    Cmp { } = OneC InstructionFormat1C { src1 => src1, src2 => src2 },
+    OneArgument { } = OneU InstructionFormat1U { dst => dst, src1 => src1, desc => desc, idx1 => relative_offset },
+    Cmp { } = OneC InstructionFormat1C { src1 => src1, src2 => src2, idx1 => adx1, cmpx => cmpx, cmpy => cmpy, desc => desc },
     ControlFlow { } = Two InstructionFormat2 { condop => cond, dst_offset => dst_offset, num => num, refx => refx, refy => refy },
     ControlFlowConstant {} = Three InstructionFormat3 { dst_offset => dst_offset, num => num, const_id => constant_id },
     SetEmit {} = Four InstructionFormat4 { winding => winding, vtxid => vtxid, primemit => primemit },
+    Mad { inverse: true } = Five InstructionFormat5 { src1 => src1, src2 => src2, src3 => src3, idx2 => adx, dst => dst, desc => desc },
+    Mad { inverse: false } = FiveI InstructionFormat5I { src1 => src1, src2 => src2, src3 => src3, idx3 => adx, dst => dst, desc => desc },
 }
 
 impl BinWrite for Instruction {
@@ -499,7 +461,7 @@ impl BinWrite for Instruction {
         &self,
         w: &mut W,
         endian: binrw::Endian,
-        args: Self::Args<'_>,
+        _: Self::Args<'_>,
     ) -> binrw::prelude::BinResult<()> {
         assert!(
             !matches!(self.operands, Operands::Unknown),
@@ -600,11 +562,17 @@ pub enum Operands {
     OneArgument {
         dst: Register,
         src1: Register,
+        relative_offset: u8,
         desc: u8,
     },
     Cmp {
         src1: Register,
         src2: Register,
+        desc: u8,
+        /// address register index for src1
+        adx1: u8,
+        cmpy: u8,
+        cmpx: u8,
     },
     SetEmit {
         vtxid: u8,
@@ -628,7 +596,9 @@ pub enum Operands {
         src1: Register,
         src2: Register,
         src3: Register,
-        desc: Option<u8>,
+        adx: u8,
+        desc: u8,
+        inverse: bool,
     },
     Zero,
     Unknown,
@@ -648,7 +618,7 @@ impl BinRead for Instruction {
     fn read_options<R: std::io::prelude::Read + Seek>(
         reader: &mut R,
         endian: binrw::Endian,
-        args: Self::Args<'_>,
+        _: Self::Args<'_>,
     ) -> binrw::prelude::BinResult<Self> {
         let instr: u32 = reader.read_type(endian)?;
 
@@ -659,7 +629,7 @@ impl BinRead for Instruction {
             "opcode is invalid {opcode_b}"
         );
         let opcode = OpCode::binary_to_op(opcode_b);
-        let format = FORMAT_TABLE.iter().find(|(k, o)| *o == opcode).unwrap().0;
+        let format = FORMAT_TABLE.iter().find(|(_, o)| *o == opcode).unwrap().0;
         let operands = InstructionFormat::from_bytes(format, bytes).into();
         Ok(Instruction { opcode, operands })
     }

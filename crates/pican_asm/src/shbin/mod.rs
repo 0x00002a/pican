@@ -43,7 +43,7 @@ impl BinWrite for Shbin {
         &self,
         writer: &mut W,
         endian: binrw::Endian,
-        args: Self::Args<'_>,
+        _: Self::Args<'_>,
     ) -> BinResult<()> {
         let p = writer.stream_position()?;
 
@@ -171,7 +171,7 @@ impl BinWrite for ExecutableSection {
         &self,
         writer: &mut W,
         endian: binrw::Endian,
-        args: Self::Args<'_>,
+        _: Self::Args<'_>,
     ) -> BinResult<()> {
         writer.write_type(&self.header, endian)?;
         struct TablesWriter<'w, W> {
