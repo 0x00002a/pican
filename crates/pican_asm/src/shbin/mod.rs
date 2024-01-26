@@ -20,6 +20,8 @@ use super::float24::Float24;
 
 pub mod instruction;
 
+const DVLP_HEADER_SZ: u64 = 0x28;
+
 #[binread]
 #[doc(alias = "DVLB")]
 #[br(magic = b"DVLB", stream = s)]
@@ -47,6 +49,11 @@ impl BinWrite for Shbin {
 
         let mut dvlp_buf = Cursor::new(Vec::new());
         dvlp_buf.write_type_args(&self.dvlp, endian, (0u64,))?;
+        assert_eq!(
+            dvlp_buf.stream_position()?,
+            self.dvlp.expected_sz(),
+            "dvlp didn't match expected size"
+        );
 
         writer.write_type(b"DVLB", endian)?;
 
@@ -56,7 +63,6 @@ impl BinWrite for Shbin {
         let mut off = (writer.stream_position()? - p)
             + dvle_count as u64 * size_of::<u32>() as u64
             + dvlp_buf.get_ref().len() as u64;
-        println!("dvlp:\n{:?}", dvlp_buf.get_ref());
 
         for dvle in &self.dvles {
             let before = dvlp_buf.stream_position()?;
@@ -83,19 +89,26 @@ impl BinWrite for Shbin {
 pub struct Dvlp {
     _mversion: u32,
     #[br(args { header_start: start, inner: () })]
-    #[bw(args { offset: 40 })]
+    #[bw(args { offset: DVLP_HEADER_SZ })]
     pub compiled_blob: ShaderBlob,
     #[br(args { header_start: start, inner: () })]
-    #[bw(args { offset: (compiled_blob.bin_size()) as u64 + 40 })]
+    #[bw(args { offset: (compiled_blob.bin_size()) as u64 + DVLP_HEADER_SZ })]
     pub operand_desc_table: OffsetTable<OperandDescriptor>,
     #[bw(assert(s.stream_position().unwrap() == 24))]
     pub rest: [u32; 4],
     #[br(ignore)]
-    #[bw(calc = compiled_blob.deref().clone(), assert(s.stream_position().unwrap() == 40))]
+    #[bw(calc = compiled_blob.deref().clone(), assert(s.stream_position().unwrap() == DVLP_HEADER_SZ))]
     compiled_blob_data: Vec<Instruction>,
     #[br(ignore)]
-    #[bw(calc = operand_desc_table.data.clone(), assert(s.stream_position().unwrap() == 40 + compiled_blob.bin_size() as u64))]
+    #[bw(calc = operand_desc_table.data.clone(), assert(s.stream_position().unwrap() == DVLP_HEADER_SZ + compiled_blob.bin_size() as u64))]
     operand_desc_data: Vec<OperandDescriptor>,
+}
+
+impl Dvlp {
+    fn expected_sz(&self) -> u64 {
+        DVLP_HEADER_SZ
+            + (self.compiled_blob.len() * 4 + self.operand_desc_table.data.len() * 8) as u64
+    }
 }
 
 impl BinSize for u32 {
