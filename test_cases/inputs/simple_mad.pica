@@ -1,0 +1,5 @@
+.fvec unif
+
+.proc main
+    mad r1, r2, unif, r1
+.end

@@ -412,7 +412,7 @@ pub fn src_idx(r: Register) -> u8 {
         RegisterKind::Input => 0x0,
         RegisterKind::Scratch => 0x10,
         RegisterKind::FloatingVecUniform => 0x20,
-        _ => unreachable!(),
+        _ => panic!("register is invalid kind for src {:?}", r.kind),
     };
     off + r.index as u8
 }
@@ -420,7 +420,7 @@ pub fn dst_idx(r: Register) -> u8 {
     let off = match r.kind {
         RegisterKind::Output => 0x0,
         RegisterKind::Scratch => 0x10,
-        _ => unreachable!(),
+        _ => panic!("register is invalid kind for dst {:?}", r.kind),
     };
     off + r.index as u8
 }

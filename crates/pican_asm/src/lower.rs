@@ -50,19 +50,44 @@ impl LowerCtx {
                 .with_s1(operands[1].swizzle.into())
                 .with_s2(operands[2].swizzle.into())
         };
+        let mad_desc = || {
+            shi::OperandDescriptor::new()
+                .with_destination_mask(operands[0].swizzle.into())
+                .with_s1(operands[1].swizzle.into())
+                .with_s2(operands[2].swizzle.into())
+                .with_s3(operands[3].swizzle.into())
+        };
         let resolve_reg = |idx: usize| {
             match operands[idx].register.kind {
                 ir::RegHoleKind::Fixed(f) => f,
                 ir::RegHoleKind::Free(_) => panic!("found free register at operand index {idx}, did the register allocation pass not run?"),
             }
         };
+        let resolve_dst = || {
+            let r = resolve_reg(0);
+            assert!(
+                r.kind.is_type(RegisterType::Output),
+                "register is invalid for dst, operand 0, ty: {:?}",
+                r.kind
+            );
+            r
+        };
+        let resolve_src = |idx: usize| {
+            let r = resolve_reg(idx);
+            assert!(
+                r.kind.is_type(RegisterType::Input) | r.kind.is_type(RegisterType::Special),
+                "register is invalid for src, operand {idx} ty {:?}",
+                r.kind,
+            );
+            r
+        };
         match ty {
             shi::InstructionFormatKind::One => {
                 let desc = self.add_desc(two_arg_desc());
                 shi::Operands::TwoArguments {
-                    dst: resolve_reg(0),
-                    src1: resolve_reg(1),
-                    src2: resolve_reg(2),
+                    dst: resolve_dst(),
+                    src1: resolve_src(1),
+                    src2: resolve_src(2),
                     relative_offset: 0,
                     desc,
                     inverse: false,
@@ -71,9 +96,9 @@ impl LowerCtx {
             shi::InstructionFormatKind::OneI => {
                 let desc = self.add_desc(two_arg_desc());
                 shi::Operands::TwoArguments {
-                    dst: resolve_reg(0),
-                    src1: resolve_reg(1),
-                    src2: resolve_reg(2),
+                    dst: resolve_dst(),
+                    src1: resolve_src(1),
+                    src2: resolve_src(2),
                     relative_offset: 0,
                     desc,
                     inverse: true,
@@ -86,15 +111,15 @@ impl LowerCtx {
                         .with_s1(operands[1].swizzle.into()),
                 );
                 shi::Operands::OneArgument {
-                    dst: resolve_reg(0),
-                    src1: resolve_reg(1),
+                    dst: resolve_dst(),
+                    src1: resolve_src(1),
                     relative_offset: 0,
                     desc,
                 }
             }
             shi::InstructionFormatKind::OneC => shi::Operands::Cmp {
-                src1: resolve_reg(0),
-                src2: resolve_reg(1),
+                src1: resolve_src(0),
+                src2: resolve_src(1),
                 desc: self.add_desc(two_arg_desc()),
                 adx1: 0,
                 cmpy: todo!(),
@@ -103,8 +128,24 @@ impl LowerCtx {
             shi::InstructionFormatKind::Two => todo!(),
             shi::InstructionFormatKind::Three => todo!(),
             shi::InstructionFormatKind::Four => todo!(),
-            shi::InstructionFormatKind::Five => todo!(),
-            shi::InstructionFormatKind::FiveI => todo!(),
+            shi::InstructionFormatKind::Five => shi::Operands::Mad {
+                dst: resolve_dst(),
+                src1: resolve_src(1),
+                src2: resolve_src(2),
+                src3: resolve_src(3),
+                adx: 0,
+                desc: self.add_desc(mad_desc()),
+                inverse: false,
+            },
+            shi::InstructionFormatKind::FiveI => shi::Operands::Mad {
+                dst: resolve_dst(),
+                src1: resolve_src(1),
+                src2: resolve_src(2),
+                src3: resolve_src(3),
+                adx: 0,
+                desc: self.add_desc(mad_desc()),
+                inverse: true,
+            },
             shi::InstructionFormatKind::Zero => {
                 assert_eq!(operands.len(), 0);
                 shi::Operands::Zero
