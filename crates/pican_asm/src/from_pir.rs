@@ -8,7 +8,7 @@ use pican_core::{
 };
 use pican_pir::{
     bindings::BindingValue,
-    ir::{EntryPoint, Module, Operand},
+    ir::{EntryPoint, InputBinding, Module, Operand},
 };
 
 use crate::{
@@ -280,7 +280,12 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     };
                     self.ident_to_reg.insert(name, reg);
                 }
-                pican_pir::bindings::BindingValue::Input(_) => todo!(),
+                pican_pir::bindings::BindingValue::Input(i) => {
+                    let r = Register::new(RegisterKind::Input, i.index);
+                    self.asm_ctx.used_input_registers.mark_used(r);
+                    let r = self.lower_register(r);
+                    self.ident_to_reg.insert(i.name.into_inner(), r);
+                }
 
                 pican_pir::bindings::BindingValue::SwizzleRegister(_)
                 | pican_pir::bindings::BindingValue::SwizzleVar(_)
