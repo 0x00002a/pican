@@ -336,10 +336,8 @@ where
         endian: binrw::Endian,
         args: Self::Args<'_>,
     ) -> BinResult<Self> {
-        println!("header start: {}", args.header_start);
         let offset: u32 = reader.read_type(endian)?;
         let count: u32 = reader.read_type(endian)?;
-        println!("off: {offset} {count}");
         let pos = reader.stream_position()?;
         reader.seek(SeekFrom::Start(offset as u64 + args.header_start))?;
         let data = reader.read_type_args(
@@ -483,7 +481,6 @@ impl RegisterIndex {
             .take_while(|(_, o)| o <= &idx)
             .last()
             .ok_or("out of bounds")?;
-        println!("idx: {idx} {off}");
         let index = idx - off;
         Ok(Register::new(*k, index as usize))
     }

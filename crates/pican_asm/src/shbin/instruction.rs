@@ -252,7 +252,6 @@ impl Instruction {
                 ..
             } => {
                 let pattern = lookup_pat(desc);
-                println!("desc: {desc:02X}, {pattern:?}");
                 format!(
                     "{}{}, {}{}{}, {}{}{}",
                     dst,

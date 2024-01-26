@@ -59,6 +59,7 @@ fn main() {
         fn picasso_roundtrip_{name}() {{
             let input = include_bytes!("{byte_file}");
             let bin: Shbin = std::io::Cursor::new(input).read_le().unwrap();
+            println!("bin: {{bin:#?}}");
             println!("-- instructions --\n{{}}", bin.dvlp.compiled_blob.iter().map(|i| format!("{{}}\n", i.to_asm(&bin.dvlp.operand_desc_table.data))).collect::<String>());
 
             let mut w = Cursor::new(Vec::new());
