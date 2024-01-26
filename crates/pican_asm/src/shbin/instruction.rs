@@ -108,6 +108,7 @@ pub struct OperandDescriptor {
     s2: OperandSource,
     #[bits = 9]
     s3: OperandSource,
+    #[skip]
     _unknown: B33,
 }
 
@@ -181,13 +182,11 @@ pub struct InstructionFormat3 {
     opc: B6,
 }
 
-#[bitfield]
+#[bitfield(bytes = 4)]
 #[derive(Debug, BinWrite, BinRead)]
 pub struct InstructionFormat4 {
-    num: B8,
     #[skip]
-    __: B2,
-    dst: B12,
+    _padding: B22,
     winding: B1,
     primemit: B1,
     vtxid: B2,
@@ -472,8 +471,8 @@ macro_rules! instructs {
                     $( $to::$arm (o) => {
                         o.set_opc(op)
                     },)*
-                    $to::Five(o) => o.set_opc(op),
-                    $to::FiveI(o) => o.set_opc(op),
+                    $to::Five(o) => o.set_opc(op >> 3),
+                    $to::FiveI(o) => o.set_opc(op >> 3),
                     _ => {},
                 }
             }
@@ -481,48 +480,12 @@ macro_rules! instructs {
     }
 }
 
-/*
-instructs! {
-    Operands,
-    InstructionFormat,
-    TwoArguments { inverse: false } = One { dst => dst, src1 => src1, src2 => src2, desc => desc }
-}*/
-/*
- *
-instructs! {
-    Operands,
-    InstructionFormat,
-    TwoArguments { inverse: false } = One InstructionFormat1 { dst => dst, src1 => src1, src2 => src2, desc => desc },
-    TwoArguments { inverse: true } = OneI InstructionFormat1I { dst => dst, src1 => src1, src2 => src2, desc => desc },
-    OneArgument { } = OneU InstructionFormat1U { dst => dst, src1 => src1, desc => desc },
-    Cmp { } = OneC InstructionFormat1C { src1 => src1, src2 => src2 },
-    //ControlFlow { } = Two InstructionFormat2 { condop => cond, dst => dst_offset, num => num, refx => refx, refy => refy },
-    //ControlFlowConstant {} = Three InstructionFormat3 { dst => dst_offset, num => num, const_id => constant_id },
-    SetEmit {} => Four InstructionFormat4 { winding => winding, vtxid => vtxid, primemit => primemit, dst => dst },
-}
-
-instructs! {
-    Operands,
-    InstructionFormat,
-    TwoArguments { inverse: false } = One InstructionFormat1 { dst => dst, src1 => src1, src2 => src2, desc => desc },
-    TwoArguments { inverse: true } = OneI InstructionFormat1I { dst => dst, src1 => src1, src2 => src2, desc => desc },
-    OneArgument { } = OneU InstructionFormat1U { dst => dst, src1 => src1, desc => desc },
-    Cmp { } = OneC InstructionFormat1C { src1 => src1, src2 => src2 },
-    ControlFlow { } = Two InstructionFormat2 { condop => cond, dst_offset => dst_offset, num => num, refx => refx, refy => refy },
-    ControlFlowConstant {} = Three InstructionFormat3 { dst_offset => dst_offset, num => num, const_id => constant_id },
-    SetEmit {} = Four InstructionFormat4 { winding => winding, vtxid => vtxid, primemit => primemit },
-    Mad { } = Five InstructionFormat5 { dst => dst, src1 => src1, src2 => src2, src3 => src3, desc => desc },
-    Mad { desc: None } = Five InstructionFormat5I { dst => dst, src1 => src1, src2 => src2, src3 => src3 },
-}
-
- */
-
 instructs! {
     Operands,
     InstructionFormat,
     set_opcode,
-    TwoArguments { inverse: false } = One InstructionFormat1 { dst => dst, src1 => src1, src2 => src2, desc => desc },
-    TwoArguments { inverse: true } = OneI InstructionFormat1I { dst => dst, src1 => src1, src2 => src2, desc => desc },
+    TwoArguments { inverse: false } = One InstructionFormat1 { dst => dst, src1 => src1, src2 => src2, desc => desc, idx1 => relative_offset },
+    TwoArguments { inverse: true } = OneI InstructionFormat1I { dst => dst, src1 => src1, src2 => src2, desc => desc, idx2 => relative_offset },
     OneArgument { } = OneU InstructionFormat1U { dst => dst, src1 => src1, desc => desc },
     Cmp { } = OneC InstructionFormat1C { src1 => src1, src2 => src2 },
     ControlFlow { } = Two InstructionFormat2 { condop => cond, dst_offset => dst_offset, num => num, refx => refx, refy => refy },
@@ -628,6 +591,7 @@ pub enum Operands {
         dst: Register,
         src1: Register,
         src2: Register,
+        relative_offset: u8,
         desc: u8,
         /// Whether it's the special form that has narrow src2 (uses 1I encoding instead)
         inverse: bool,
