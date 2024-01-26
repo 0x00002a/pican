@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use pican_core::ir::Float;
 
-use crate::ir::{FreeRegId, ProcId, RegHole, RegisterId, Vec4};
+use crate::ir::{ProcId, RegisterId, Vec4};
 
 #[derive(Debug)]
 pub enum ConstantUniform {
@@ -17,6 +17,7 @@ pub enum ProcInfo {}
 pub struct AsmContext {
     /// Register -> Constant lookup
     constants: HashMap<RegisterId, ConstantUniform>,
+    #[allow(unused)]
     procs: HashMap<ProcId, ProcInfo>,
 }
 

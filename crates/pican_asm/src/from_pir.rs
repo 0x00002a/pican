@@ -81,6 +81,7 @@ struct LowerCtx<'a, 'm, 'c> {
     asm: InstructionPack,
     procs: ProcCache<'a>,
     pir: &'m Module<'a>,
+    #[allow(unused)]
     diag: &'c Diagnostics,
     regs: RegCache,
     ident_to_reg: HashMap<Ident<'a>, RegHole>,

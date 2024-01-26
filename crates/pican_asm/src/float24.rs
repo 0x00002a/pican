@@ -104,10 +104,6 @@ impl Float24 {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-
-    use binrw::BinReaderExt;
-
     use crate::float24::{split_up_float, Float24};
 
     #[test]

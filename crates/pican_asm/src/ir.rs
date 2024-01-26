@@ -1,11 +1,10 @@
 use pican_core::{
     copy_arrayvec::CopyArrayVec,
-    ir::{Float, Ident, SwizzleDim, SwizzleDims},
+    ir::SwizzleDim,
     ops::OpCode,
-    properties::OutputProperty,
     register::{Register, RegisterKind},
 };
-use pican_pir::ty::UniformTy;
+
 use serde::{Deserialize, Serialize};
 use typesum::sumtype;
 
