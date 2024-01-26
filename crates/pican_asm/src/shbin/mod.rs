@@ -107,7 +107,9 @@ pub struct Dvlp {
 impl Dvlp {
     fn expected_sz(&self) -> u64 {
         DVLP_HEADER_SZ
-            + (self.compiled_blob.len() * 4 + self.operand_desc_table.data.len() * 8) as u64
+            + (self.compiled_blob.len() * size_of::<u32>()
+                + self.operand_desc_table.data.len() * size_of::<OperandDescriptor>())
+                as u64
     }
 }
 

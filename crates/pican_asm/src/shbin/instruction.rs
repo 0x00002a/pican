@@ -9,6 +9,8 @@ use pican_core::{
 use strum::EnumDiscriminants;
 use typesum::sumtype;
 
+const OPCODE_OFFSET: u32 = 0x1a;
+
 #[bitfield(filled = false)]
 #[derive(Debug, BitfieldSpecifier)]
 pub struct ComponentMask {
@@ -310,25 +312,7 @@ impl Instruction {
     }
 }
 
-macro_rules! instruct_rec {
-    ($v:ident, dst: $d:ident) => {
-        $v.set_dst(dst_idx($d))
-    };
-    ($v:ident, src1: $s:ident) => {
-        $v.set_src1(src_idx($s))
-    };
-    ($v:ident, src2: $s:ident) => {
-        $v.set_src2(src_idx($s))
-    };
-    ($v:ident, src3: $s:ident) => {
-        $v.set_src3(src_idx($s))
-    };
-    ($v:ident, $t:ident: $d:ident) => {
-        paste::paste! { $v.[<set_ $t>]($d) }
-    };
-}
-
-fn src_idx(r: Register) -> u8 {
+pub fn src_idx(r: Register) -> u8 {
     let off = match r.kind {
         RegisterKind::Input => 0x0,
         RegisterKind::Scratch => 0x10,
@@ -337,45 +321,13 @@ fn src_idx(r: Register) -> u8 {
     };
     off + r.index as u8
 }
-fn dst_idx(r: Register) -> u8 {
+pub fn dst_idx(r: Register) -> u8 {
     let off = match r.kind {
         RegisterKind::Output => 0x0,
         RegisterKind::Scratch => 0x10,
         _ => unreachable!(),
     };
     off + r.index as u8
-}
-
-macro_rules! map_vtn {
-    ($vr:expr, dst) => {
-        Instruction::dst_to_register($vr)
-    };
-    ($vr:expr, src1) => {
-        Instruction::src_to_register($vr)
-    };
-    ($vr:expr, src2) => {
-        Instruction::src_to_register($vr)
-    };
-    ($vr:expr, src3) => {
-        Instruction::src_to_register($vr)
-    };
-    ($vr:expr, desc) => {
-        $vr.into()
-    };
-    ($vr:expr, $o:ident) => {
-        $vr
-    };
-}
-
-macro_rules! instruct {
-    ($f:ident { $($n:ident: $v:ident),+ }) => {
-        {
-            let mut v = $f::new();
-            $(instruct_rec!(v, $n: $v);)+
-            v.into()
-        }
-    }
-
 }
 
 #[binrw]
@@ -398,62 +350,6 @@ pub enum InstructionFormat {
     Unknown,
 }
 
-macro_rules! instructs {
-    ($from:ident, $to:ident, $set_opcode:ident, $($f:ident { $($v:ident: $c:expr),* } = $arm:ident $armty:ident { $($vtn:ident => $vtt:ident),* },)*) => {
-        impl From<$to> for $from {
-            fn from(t: $to) -> Self {
-                match t {
-                    $( $to::$arm (o) => {
-                        $(let $vtt = map_vtn!(o.$vtn(), $vtn);)*
-                        $from :: $f { $($v: $c,)* $($vtt,)* }
-                    },)*
-                    $to::Zero => $from::Zero,
-                    $to::Unknown => $from::Unknown,
-                }
-            }
-        }
-
-        impl From<$from> for $to {
-            fn from(t: $from) -> Self {
-                match t {
-                    $( $from::$f { $($v: $c,)* $($vtt,)* } => instruct! ( $armty { $($vtn: $vtt),* } ),)*
-                    $from::Zero => $to::Zero,
-                    $from::Unknown => $to::Unknown,
-                }
-            }
-        }
-        impl $to {
-            fn $set_opcode(&mut self, op: OpCode) {
-                let op = op.bin_id();
-                #[allow(unreachable_patterns)]
-                match self {
-                    $to::Five(o) => o.set_opc(op >> 3),
-                    $to::FiveI(o) => o.set_opc(op >> 3),
-                    $( $to::$arm (o) => {
-                        o.set_opc(op)
-                    },)*
-                    _ => {},
-                }
-            }
-        }
-    }
-}
-
-instructs! {
-    Operands,
-    InstructionFormat,
-    set_opcode,
-    TwoArguments { inverse: false } = One InstructionFormat1 { dst => dst, src1 => src1, src2 => src2, desc => desc, idx1 => relative_offset },
-    TwoArguments { inverse: true } = OneI InstructionFormat1I { dst => dst, src1 => src1, src2 => src2, desc => desc, idx2 => relative_offset },
-    OneArgument { } = OneU InstructionFormat1U { dst => dst, src1 => src1, desc => desc, idx1 => relative_offset },
-    Cmp { } = OneC InstructionFormat1C { src1 => src1, src2 => src2, idx1 => adx1, cmpx => cmpx, cmpy => cmpy, desc => desc },
-    ControlFlow { } = Two InstructionFormat2 { condop => cond, dst_offset => dst_offset, num => num, refx => refx, refy => refy },
-    ControlFlowConstant {} = Three InstructionFormat3 { dst_offset => dst_offset, num => num, const_id => constant_id },
-    SetEmit {} = Four InstructionFormat4 { winding => winding, vtxid => vtxid, primemit => primemit },
-    Mad { inverse: true } = Five InstructionFormat5 { src1 => src1, src2 => src2, src3 => src3, idx2 => adx, dst => dst, desc => desc },
-    Mad { inverse: false } = FiveI InstructionFormat5I { src1 => src1, src2 => src2, src3 => src3, idx3 => adx, dst => dst, desc => desc },
-}
-
 impl BinWrite for Instruction {
     type Args<'a> = ();
 
@@ -469,7 +365,7 @@ impl BinWrite for Instruction {
         );
         let start = w.stream_position()?;
         if matches!(self.operands, Operands::Zero) {
-            w.write_type(&((self.opcode.bin_id() as u32) << 26), endian)?;
+            w.write_type(&((self.opcode.bin_id() as u32) << OPCODE_OFFSET), endian)?;
         }
         let mut format: InstructionFormat = self.operands.into();
         format.set_opcode(self.opcode);
@@ -603,6 +499,7 @@ pub enum Operands {
     Zero,
     Unknown,
 }
+
 pub fn assemble_program(
     program: &[Instruction],
     to: &mut (impl Write + Seek),
@@ -623,7 +520,7 @@ impl BinRead for Instruction {
         let instr: u32 = reader.read_type(endian)?;
 
         let bytes = instr.to_le_bytes();
-        let opcode_b = (instr >> 0x1A) as u8;
+        let opcode_b = (instr >> OPCODE_OFFSET) as u8;
         assert!(
             opcode_b <= OpCode::maximum_value(),
             "opcode is invalid {opcode_b}"
@@ -633,6 +530,112 @@ impl BinRead for Instruction {
         let operands = InstructionFormat::from_bytes(format, bytes).into();
         Ok(Instruction { opcode, operands })
     }
+}
+
+macro_rules! instruct_rec {
+    ($v:ident, dst: $d:ident) => {
+        $v.set_dst(dst_idx($d))
+    };
+    ($v:ident, src1: $s:ident) => {
+        $v.set_src1(src_idx($s))
+    };
+    ($v:ident, src2: $s:ident) => {
+        $v.set_src2(src_idx($s))
+    };
+    ($v:ident, src3: $s:ident) => {
+        $v.set_src3(src_idx($s))
+    };
+    ($v:ident, $t:ident: $d:ident) => {
+        paste::paste! { $v.[<set_ $t>]($d) }
+    };
+}
+
+macro_rules! map_vtn {
+    ($vr:expr, dst) => {
+        Instruction::dst_to_register($vr)
+    };
+    ($vr:expr, src1) => {
+        Instruction::src_to_register($vr)
+    };
+    ($vr:expr, src2) => {
+        Instruction::src_to_register($vr)
+    };
+    ($vr:expr, src3) => {
+        Instruction::src_to_register($vr)
+    };
+    ($vr:expr, desc) => {
+        $vr.into()
+    };
+    ($vr:expr, $o:ident) => {
+        $vr
+    };
+}
+
+macro_rules! instruct {
+    ($f:ident { $($n:ident: $v:ident),+ }) => {
+        {
+            let mut v = $f::new();
+            $(instruct_rec!(v, $n: $v);)+
+            v.into()
+        }
+    }
+
+}
+
+macro_rules! instructs {
+    ($from:ident, $to:ident, $set_opcode:ident, $($f:ident { $($v:ident: $c:expr),* } = $arm:ident $armty:ident { $($vtn:ident => $vtt:ident),* },)*) => {
+        impl From<$to> for $from {
+            fn from(t: $to) -> Self {
+                match t {
+                    $( $to::$arm (o) => {
+                        $(let $vtt = map_vtn!(o.$vtn(), $vtn);)*
+                        $from :: $f { $($v: $c,)* $($vtt,)* }
+                    },)*
+                    $to::Zero => $from::Zero,
+                    $to::Unknown => $from::Unknown,
+                }
+            }
+        }
+
+        impl From<$from> for $to {
+            fn from(t: $from) -> Self {
+                match t {
+                    $( $from::$f { $($v: $c,)* $($vtt,)* } => instruct! ( $armty { $($vtn: $vtt),* } ),)*
+                    $from::Zero => $to::Zero,
+                    $from::Unknown => $to::Unknown,
+                }
+            }
+        }
+        impl $to {
+            fn $set_opcode(&mut self, op: OpCode) {
+                let op = op.bin_id();
+                #[allow(unreachable_patterns)]
+                match self {
+                    $to::Five(o) => o.set_opc(op >> 3),
+                    $to::FiveI(o) => o.set_opc(op >> 3),
+                    $( $to::$arm (o) => {
+                        o.set_opc(op)
+                    },)*
+                    _ => {},
+                }
+            }
+        }
+    }
+}
+
+instructs! {
+    Operands,
+    InstructionFormat,
+    set_opcode,
+    TwoArguments { inverse: false } = One InstructionFormat1 { dst => dst, src1 => src1, src2 => src2, desc => desc, idx1 => relative_offset },
+    TwoArguments { inverse: true } = OneI InstructionFormat1I { dst => dst, src1 => src1, src2 => src2, desc => desc, idx2 => relative_offset },
+    OneArgument { } = OneU InstructionFormat1U { dst => dst, src1 => src1, desc => desc, idx1 => relative_offset },
+    Cmp { } = OneC InstructionFormat1C { src1 => src1, src2 => src2, idx1 => adx1, cmpx => cmpx, cmpy => cmpy, desc => desc },
+    ControlFlow { } = Two InstructionFormat2 { condop => cond, dst_offset => dst_offset, num => num, refx => refx, refy => refy },
+    ControlFlowConstant {} = Three InstructionFormat3 { dst_offset => dst_offset, num => num, const_id => constant_id },
+    SetEmit {} = Four InstructionFormat4 { winding => winding, vtxid => vtxid, primemit => primemit },
+    Mad { inverse: true } = Five InstructionFormat5 { src1 => src1, src2 => src2, src3 => src3, idx2 => adx, dst => dst, desc => desc },
+    Mad { inverse: false } = FiveI InstructionFormat5I { src1 => src1, src2 => src2, src3 => src3, idx3 => adx, dst => dst, desc => desc },
 }
 
 #[cfg(test)]
