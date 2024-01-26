@@ -1,0 +1,7 @@
+.out op1 pos
+.out op2 clr
+.out op3 texcoord0
+
+.proc main
+    end
+.end

@@ -12,7 +12,7 @@ use pican_pir::{
 };
 
 use crate::{
-    context::{AsmContext, BoundUniform, ProcInfo},
+    context::{AsmContext, BoundUniform, OutputInfo, ProcInfo},
     float24::Float24,
     instrs::InstructionPack,
     ir::{self, FreeRegister, Instruction, ProcId, RegHole, RegHoleKind, RegisterId, Vec4},
@@ -300,18 +300,20 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                 pican_pir::bindings::BindingValue::OutputProperty(o) => {
                     assert!(o.alias.is_some());
 
-                    let reg = if let Some(r) = o.register {
+                    let r = if let Some(r) = o.register {
                         let r = r.into_inner();
                         self.asm_ctx.used_output_registers.mark_used(r);
-                        self.lower_register(r)
+                        r
                     } else {
-                        let reg = self.unif_regs.allocate_diag(
-                            RegisterKind::Output,
-                            self.diag,
-                            &value,
-                        )?;
-                        self.lower_register(reg)
+                        self.unif_regs
+                            .allocate_diag(RegisterKind::Output, self.diag, &value)?
                     };
+                    let reg = self.lower_register(r);
+                    self.asm_ctx.outputs.push(OutputInfo {
+                        property: o.property.into_inner(),
+                        register: reg.id,
+                        mask: Default::default(),
+                    });
                     self.ident_to_reg.insert(name, reg);
                 }
                 pican_pir::bindings::BindingValue::Input(i) => {
