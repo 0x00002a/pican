@@ -278,10 +278,11 @@ impl From<Option<SwizzleDims>> for shi::OperandSource {
 fn build_symbol_table(ctx: &AsmContext) -> (HashMap<SymbolId, u32>, Vec<NullString>) {
     let mut sym_to_offset = HashMap::new();
     let mut tbl = Vec::new();
+    let mut offset = 0;
     for id in ctx.uniforms.iter().map(|uni| uni.name) {
         let sym = ctx.symbols.lookup_id(id).unwrap();
-        let offset = tbl.len();
         sym_to_offset.insert(id, offset as u32);
+        offset += sym.len() + 1;
         tbl.push(sym.into());
     }
     (sym_to_offset, tbl)
