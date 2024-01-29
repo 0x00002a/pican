@@ -82,9 +82,13 @@ struct FreeRegTracker {
     next_float: usize,
     next_input: usize,
     next_output: usize,
+    // these count up but resolve to max - value
+    next_c_int: usize,
+    next_c_float: usize,
+    next_c_bool: usize,
 }
 impl FreeRegTracker {
-    fn allocate(&mut self, kind: RegisterKind) -> Option<Register> {
+    fn allocate_impl(&mut self, kind: RegisterKind, constant: bool) -> Option<Register> {
         let next = match kind {
             RegisterKind::FloatingVecUniform => &mut self.next_float,
             RegisterKind::IntegerVecUniform => &mut self.next_int,
@@ -93,10 +97,26 @@ impl FreeRegTracker {
             RegisterKind::Output => &mut self.next_output,
             RegisterKind::Scratch => unreachable!(),
         };
-        if *next > kind.max_index() {
+        let constant_accessor = match kind {
+            RegisterKind::FloatingVecUniform => Some(&mut self.next_c_float),
+            RegisterKind::IntegerVecUniform => Some(&mut self.next_c_int),
+            RegisterKind::BoolUniform => Some(&mut self.next_c_bool),
+            _ => None,
+        };
+        if *next > kind.max_index()
+            || Some(*next) == constant_accessor.as_ref().map(|c| kind.max_index() - **c)
+        {
             None
         } else {
-            let r = Register::new(kind, *next);
+            let (next, v) = if constant {
+                let c = constant_accessor.expect("tried to allocate non-uniform constant");
+                let v = kind.max_index() - *c;
+                (c, v)
+            } else {
+                let v = *next;
+                (next, v)
+            };
+            let r = Register::new(kind, v);
             *next += 1;
             Some(r)
         }
@@ -108,7 +128,26 @@ impl FreeRegTracker {
         diag: &Diagnostics,
         span: &impl HasSpan,
     ) -> Result<Register, FatalErrorEmitted> {
-        self.allocate(kind).ok_or_else(|| {
+        self.allocate_diag_impl(kind, diag, span, false)
+    }
+
+    fn allocate_diag_constant(
+        &mut self,
+        kind: RegisterKind,
+        diag: &Diagnostics,
+        span: &impl HasSpan,
+    ) -> Result<Register, FatalErrorEmitted> {
+        self.allocate_diag_impl(kind, diag, span, true)
+    }
+
+    fn allocate_diag_impl(
+        &mut self,
+        kind: RegisterKind,
+        diag: &Diagnostics,
+        span: &impl HasSpan,
+        c: bool,
+    ) -> Result<Register, FatalErrorEmitted> {
+        self.allocate_impl(kind, c).ok_or_else(|| {
             diag.fatal::<()>(
                 DiagnosticBuilder::error()
                     .at(span)
@@ -292,7 +331,9 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     let id = self.regs.next_reg_id();
                     self.asm_ctx.define_constant(id, v);
 
-                    let reg = self.unif_regs.allocate_diag(kind, self.diag, &value)?;
+                    let reg = self
+                        .unif_regs
+                        .allocate_diag_constant(kind, self.diag, &value)?;
                     self.asm_ctx.allocated_registers.insert(id, reg);
                     let r = self.lower_register(reg);
                     self.ident_to_reg.insert(name, r);
