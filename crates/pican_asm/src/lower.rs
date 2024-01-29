@@ -34,9 +34,13 @@ struct LowerCtx {
 
 impl LowerCtx {
     fn add_desc(&mut self, desc: OperandDescriptor) -> u8 {
-        let offset = self.descriptors.len() as u8;
-        self.descriptors.push(desc);
-        offset
+        if let Some(offset) = self.descriptors.iter().position(|d| d == &desc) {
+            offset as u8
+        } else {
+            let offset = self.descriptors.len() as u8;
+            self.descriptors.push(desc);
+            offset
+        }
     }
     //fn conv_operand(&mut self, dst: Option<ir::Operand>, src1: Option<ir::Operand>, src2: Option<ir::Operand>, src3: Option<ir::Operand>, )
     fn convert_operands(
