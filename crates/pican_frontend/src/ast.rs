@@ -47,7 +47,10 @@ pub enum Directive<'a> {
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
-pub struct InputBind<'a>(pub IrNode<Ident<'a>>);
+pub struct InputBind<'a> {
+    pub ident: IrNode<Ident<'a>>,
+    pub register: Option<IrNode<Register>>,
+}
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct OutputBind<'a> {

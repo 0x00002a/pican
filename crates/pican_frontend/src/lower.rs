@@ -42,8 +42,8 @@ mod lowering {
     };
 
     use crate::ast::{
-        Constant, FunctionDecl, Op, Operand, OperandKind, Operands, OutputBind, RegisterBindTarget,
-        Statement, SwizzleExpr, UniformTy,
+        Constant, FunctionDecl, InputBind, Op, Operand, OperandKind, Operands, OutputBind,
+        RegisterBindTarget, Statement, SwizzleExpr, UniformTy,
     };
     use pican_pir::bindings::{self as pib, SwizzleValue};
     use pican_pir::ir as pir;
@@ -162,11 +162,12 @@ mod lowering {
                 }
                 Statement::InputBind(i) => {
                     let b = i
-                        .map(|i| {
-                            self.check_non_aliased(i.0)?;
+                        .map(|InputBind { ident, register }| {
+                            self.check_non_aliased(ident)?;
                             Ok(self.alloc.alloc(pir::InputBinding {
-                                name: i.0.lower(self)?,
+                                name: ident.lower(self)?,
                                 index: self.inputs.len(),
+                                register,
                             }))
                         })
                         .transpose()?
@@ -397,7 +398,13 @@ mod lowering {
                 target.into_inner()
             } else {
                 match self.target.get() {
-                    RegisterBindTarget::Register(r) => Ok(pib::BindingValue::Register(*r)),
+                    RegisterBindTarget::Register(r) => Ok(match r.kind {
+                        pican_core::register::RegisterKind::Input |
+                        pican_core::register::RegisterKind::Output => panic!("found alias for input or output, this should've been caught in an earlier pass"),
+                        _ => {
+                            pib::BindingValue::Register(*r)
+                        }
+                    } ),
                     RegisterBindTarget::Var(v) => Ok(pib::BindingValue::Alias(v.lower(ctx)?)),
                 }
             }

@@ -410,12 +410,20 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     });
                     self.ident_to_reg.insert(IdentKey::new(name, None), reg);
                 }
-                pican_pir::bindings::BindingValue::Input(i) => {
-                    let reg = Register::new(RegisterKind::Input, i.index);
+                pican_pir::bindings::BindingValue::Input(
+                    i @ InputBinding {
+                        name,
+                        index,
+                        register,
+                    },
+                ) => {
+                    let reg = register
+                        .map(|r| r.into_inner())
+                        .unwrap_or(Register::new(RegisterKind::Input, *index));
                     self.asm_ctx.used_input_registers.mark_used(reg);
                     let r = self.lower_register(reg);
                     self.ident_to_reg
-                        .insert(IdentKey::new(i.name.into_inner(), None), r);
+                        .insert(IdentKey::new(name.into_inner(), None), r);
                     let name = self.asm_ctx.define_symbol(i.name.into_inner());
                     self.asm_ctx.uniforms.push(BoundUniform {
                         name,

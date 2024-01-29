@@ -26,6 +26,7 @@ pub struct Module<'a> {
 pub struct InputBinding<'a> {
     pub name: IrNode<Ident<'a>>,
     pub index: usize,
+    pub register: Option<IrNode<Register>>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq, Clone, Hash)]

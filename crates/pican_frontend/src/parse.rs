@@ -1,8 +1,8 @@
 use super::ast::Stmt;
 use crate::ast::{
     self, Block, Constant, ConstantDecl, ConstantDiscriminants, Directive, FunctionDecl, Ident,
-    InputBind, Op, OpCode, Operand, OperandKind, Operands, OutputBind, RegisterBind, Statement,
-    SwizzleExpr, Uniform, UniformDecl, UniformTy,
+    InputBind, Op, OpCode, Operand, OperandKind, Operands, OutputBind, RegisterBind,
+    RegisterBindTarget, Statement, SwizzleExpr, Uniform, UniformDecl, UniformTy,
 };
 use crate::parse_ext::ParserExt;
 
@@ -271,10 +271,9 @@ fn register_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, RegisterBind<'a>
     let (i, _) = space(i)?;
     let (i, name) = nfo(ident.req("expected identifier for alias"))(i)?;
     let (i, _) = space(i)?;
-    let (i, reg) = nfo(
-        swizzle_expr(register.map(Into::into).or(ident.map(Into::into)))
-            .req("expected register for alias"),
-    )(i)?;
+    let swiz = swizzle_expr(register.map(Into::into).or(ident.map(Into::into)))
+        .req("expected register for alias");
+    let (i, reg) = nfo(swiz)(i)?;
     Ok((i, RegisterBind { name, reg }))
 }
 
@@ -494,12 +493,42 @@ fn output_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OutputBind<'a>> {
     ))
 }
 fn input_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, InputBind<'a>> {
+    let alias_version = ncm::verify(register_bind, |r| {
+        r.reg
+            .get()
+            .target
+            .get()
+            .as_register()
+            .filter(|r| r.kind == RegisterKind::Input)
+            .is_some()
+    })
+    .map(|r| InputBind {
+        ident: r.name,
+        register: Some(
+            r.reg
+                .into_inner()
+                .target
+                .map(|r| r.into_register().unwrap()),
+        ),
+    });
+    let (i, alias_v) = ncm::opt(alias_version)(i)?;
+    if let Some(v) = alias_v {
+        return Ok((i, v));
+    }
+
     let (i, _) = tag(".in")(i)?;
     let (i, _) = space(i)?;
     let (i, name) = nfo(ident)
         .req("expected identifier for input binding")
         .parse(i)?;
-    Ok((i, InputBind(name)))
+    let (i, register) = ncm::opt(nfo(register))(i)?;
+    Ok((
+        i,
+        InputBind {
+            ident: name,
+            register,
+        },
+    ))
 }
 
 fn opcode<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, OpCode> {
@@ -865,5 +894,19 @@ mod tests {
         let ctx = TestCtx::new();
         let r = ctx.run_parser("end", super::op).unwrap();
         assert_eq!(r.opcode.get(), &OpCode::End);
+    }
+    #[test]
+    fn alias_to_input_is_parsed_as_input() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser(".alias m v0", super::stmt).unwrap();
+        assert_eq!(
+            r.try_as_input_bind()
+                .unwrap()
+                .into_inner()
+                .register
+                .unwrap()
+                .into_inner(),
+            Register::new(RegisterKind::Input, 0)
+        );
     }
 }
