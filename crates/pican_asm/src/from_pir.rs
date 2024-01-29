@@ -288,7 +288,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     let r = *r;
                     match r.kind {
                         RegisterKind::Input => self.asm_ctx.used_input_registers.mark_used(r),
-                        RegisterKind::Output => self.asm_ctx.used_input_registers.mark_used(r),
+                        RegisterKind::Output => self.asm_ctx.used_output_registers.mark_used(r),
                         _ => {}
                     }
                     let reg = self.lower_register(r);
@@ -396,12 +396,12 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
 
                     let r = if let Some(r) = o.register {
                         let r = r.into_inner();
-                        self.asm_ctx.used_output_registers.mark_used(r);
                         r
                     } else {
                         self.unif_regs
                             .allocate_diag(RegisterKind::Output, self.diag, &value)?
                     };
+                    self.asm_ctx.used_output_registers.mark_used(r);
                     let reg = self.lower_register(r);
                     self.asm_ctx.outputs.push(OutputInfo {
                         property: o.property.into_inner(),

@@ -577,3 +577,19 @@ pub enum ShaderType {
     #[brw(magic = 1u8)]
     Geometry,
 }
+
+#[cfg(test)]
+mod tests {
+    use pican_core::register::{Register, RegisterKind};
+
+    use super::IoRegisterBitMask;
+
+    #[test]
+    fn mark_used_io_registers() {
+        let mut io = IoRegisterBitMask::default();
+        io.mark_used(Register::new(RegisterKind::Input, 0));
+        assert_eq!(io.0, 1);
+        io.mark_used(Register::new(RegisterKind::Input, 1));
+        assert_eq!(io.0, 3);
+    }
+}
