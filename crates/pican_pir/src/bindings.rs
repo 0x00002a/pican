@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use indexmap::IndexMap;
 use pican_core::{
     diagnostics::{DiagnosticBuilder, Diagnostics, FatalErrorEmitted},
     ir::{Ident, IrNode, SwizzleDims},
@@ -18,7 +19,7 @@ struct Binding<'a> {
 #[derive(Debug, Default, Serialize, PartialEq, Eq, Clone)]
 pub struct Bindings<'a> {
     #[serde(flatten)]
-    tbl: HashMap<Ident<'a>, Binding<'a>>,
+    tbl: IndexMap<Ident<'a>, Binding<'a>>,
 }
 
 impl<'a> Bindings<'a> {

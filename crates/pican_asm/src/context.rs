@@ -37,6 +37,9 @@ impl Symbols {
     pub fn iter(&self) -> impl Iterator<Item = (SymbolId, &str)> {
         self.syms.into_iter()
     }
+    pub fn lookup_id(&self, id: SymbolId) -> Option<&str> {
+        self.syms.resolve(id)
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OutputInfo {

@@ -432,6 +432,9 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
         for ent in self.pir.entry_points {
             self.lower_entry_point(ent.get())?;
         }
+        self.asm_ctx
+            .uniforms
+            .sort_by_key(|u| u.start_register.index);
         Ok((self.asm_ctx, self.asm))
     }
 }
