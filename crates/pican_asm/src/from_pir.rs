@@ -161,6 +161,25 @@ impl FreeRegTracker {
     }
 }
 
+#[derive(Hash, Clone, Copy, PartialEq, Eq)]
+struct IdentKey<'a> {
+    ident: Ident<'a>,
+    index: Option<u32>,
+}
+
+impl<'a> IdentKey<'a> {
+    fn new(ident: Ident<'a>, index: Option<u32>) -> Self {
+        Self { ident, index }
+    }
+
+    fn with_ident(self, i: Ident<'a>) -> Self {
+        Self {
+            ident: i,
+            index: self.index,
+        }
+    }
+}
+
 struct LowerCtx<'a, 'm, 'c> {
     asm_ctx: AsmContext,
     asm: InstructionPack,
@@ -169,7 +188,7 @@ struct LowerCtx<'a, 'm, 'c> {
     #[allow(unused)]
     diag: &'c Diagnostics,
     regs: RegCache,
-    ident_to_reg: HashMap<Ident<'a>, RegHole>,
+    ident_to_reg: HashMap<IdentKey<'a>, RegHole>,
     unif_regs: FreeRegTracker,
 }
 impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
@@ -180,11 +199,14 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
             kind: RegHoleKind::Fixed(r),
         }
     }
-    fn resolve_operand_ident(&mut self, ident: &Ident<'a>) -> (RegHole, Option<SwizzleDims<'a>>) {
+    fn resolve_operand_ident(
+        &mut self,
+        ident: &IdentKey<'a>,
+    ) -> (RegHole, Option<SwizzleDims<'a>>) {
         match self
             .pir
             .bindings
-            .lookup(ident)
+            .lookup(&ident.ident)
             .expect("missing identifier, should've been caught earlier")
             .into_inner()
         {
@@ -195,23 +217,33 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
             BindingValue::SwizzleVar(v) => {
                 // todo: should swizzles compose?
                 (
-                    self.resolve_operand_ident(v.target.get()).0,
+                    self.resolve_operand_ident(&ident.with_ident(v.target.into_inner()))
+                        .0,
                     Some(v.swizzle.into_inner()),
                 )
             }
-            BindingValue::Alias(i) => self.resolve_operand_ident(&i),
+            BindingValue::Alias(i) => self.resolve_operand_ident(&ident.with_ident(i)),
             _ => (*self.ident_to_reg.get(ident).unwrap(), None),
         }
     }
-    fn lower_operand(&mut self, operand: &Operand<'a>) -> ir::Operand {
-        let (register, swizzle) = match operand.kind.get() {
-            pican_pir::ir::OperandKind::Var(v) => self.resolve_operand_ident(v.get()),
+    fn lower_operand(
+        &mut self,
+        Operand {
+            kind,
+            relative_addr,
+            swizzle,
+        }: &Operand<'a>,
+    ) -> ir::Operand {
+        let (register, swiz) = match kind.get() {
+            pican_pir::ir::OperandKind::Var(v) => self.resolve_operand_ident(&IdentKey::new(
+                v.into_inner(),
+                relative_addr.map(|a| a.into_inner()),
+            )),
             pican_pir::ir::OperandKind::Register(r) => (self.lower_register(*r.get()), None),
         };
-        let swizzle = operand
-            .swizzle
+        let swizzle = swizzle
             .map(|s| s.into_inner())
-            .or(swizzle)
+            .or(swiz)
             .map(|s| s.0.into_inner())
             .map(|s| s.iter().copied().collect());
         ir::Operand { register, swizzle }
@@ -260,7 +292,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                         _ => {}
                     }
                     let reg = self.lower_register(r);
-                    self.ident_to_reg.insert(name, reg);
+                    self.ident_to_reg.insert(IdentKey::new(name, None), reg);
                 }
                 pican_pir::bindings::BindingValue::Uniform(u) => {
                     let kind = match u.ty.get() {
@@ -268,14 +300,35 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                         pican_pir::ty::UniformTy::Integer => RegisterKind::IntegerVecUniform,
                         pican_pir::ty::UniformTy::Float => RegisterKind::FloatingVecUniform,
                     };
-                    let reg = self.unif_regs.allocate_diag(kind, self.diag, &value)?;
-                    let r = self.lower_register(reg);
-                    self.ident_to_reg.insert(name, r);
+
+                    let (start, end) = if let Some(dim) = u.dimension {
+                        let mut start = None;
+                        let mut end = None;
+                        for d in 0..dim.into_inner() {
+                            let reg = self.unif_regs.allocate_diag(kind, self.diag, &value)?;
+                            let r = self.lower_register(reg);
+                            self.ident_to_reg
+                                .insert(IdentKey::new(name, Some(d as u32)), r);
+                            if start.is_none() {
+                                start.replace(reg);
+                            }
+                            if d == dim.into_inner() - 1 {
+                                end.replace(reg);
+                            }
+                        }
+                        (start.unwrap(), end.unwrap())
+                    } else {
+                        let reg = self.unif_regs.allocate_diag(kind, self.diag, &value)?;
+                        let r = self.lower_register(reg);
+                        self.ident_to_reg.insert(IdentKey::new(name, None), r);
+                        (reg, reg)
+                    };
+
                     let name = self.asm_ctx.define_symbol(name);
                     self.asm_ctx.uniforms.push(BoundUniform {
                         name,
-                        start_register: reg,
-                        end_register: reg,
+                        start_register: start,
+                        end_register: end,
                     })
                 }
                 pican_pir::bindings::BindingValue::Constant(c) => {
@@ -336,7 +389,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                         .allocate_diag_constant(kind, self.diag, &value)?;
                     self.asm_ctx.allocated_registers.insert(id, reg);
                     let r = self.lower_register(reg);
-                    self.ident_to_reg.insert(name, r);
+                    self.ident_to_reg.insert(IdentKey::new(name, None), r);
                 }
                 pican_pir::bindings::BindingValue::OutputProperty(o) => {
                     assert!(o.alias.is_some());
@@ -355,13 +408,14 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                         register: reg.id,
                         mask: Default::default(),
                     });
-                    self.ident_to_reg.insert(name, reg);
+                    self.ident_to_reg.insert(IdentKey::new(name, None), reg);
                 }
                 pican_pir::bindings::BindingValue::Input(i) => {
                     let reg = Register::new(RegisterKind::Input, i.index);
                     self.asm_ctx.used_input_registers.mark_used(reg);
                     let r = self.lower_register(reg);
-                    self.ident_to_reg.insert(i.name.into_inner(), r);
+                    self.ident_to_reg
+                        .insert(IdentKey::new(i.name.into_inner(), None), r);
                     let name = self.asm_ctx.define_symbol(i.name.into_inner());
                     self.asm_ctx.uniforms.push(BoundUniform {
                         name,
