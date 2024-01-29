@@ -60,8 +60,11 @@ pub struct OutputBind<'a> {
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug, EnumDiscriminants)]
+#[sumtype(only = is)]
 pub enum Constant<'a> {
+    #[sumtype(as)]
     Integer(IrNode<&'a [IrNode<i32>]>),
+    #[sumtype(as)]
     Float(IrNode<&'a [IrNode<Float>]>),
     FloatArray {
         elements: IrNode<&'a [IrNode<&'a [IrNode<Float>]>]>,

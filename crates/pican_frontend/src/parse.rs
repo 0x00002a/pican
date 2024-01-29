@@ -294,17 +294,14 @@ fn f32<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, f32> {
         |(l, n), c| (l + c.to_digit(10).unwrap() as f32 / n, n + 10.0),
     )
     .map(|(l, _)| l);
-    let (i, (ipart, _, floating)) =
-        tuple((nmc::i32, tag("."), frac_part.req("missing floating part"))).parse(i)?;
-    Ok((
-        i,
-        (ipart as f32)
-            + if ipart.is_negative() {
-                -floating
-            } else {
-                floating
-            },
+    let (i, (negi, ipart, _, floating)) = tuple((
+        ncm::opt(tag("-")).map(|v| v.is_some()),
+        nmc::u32,
+        tag("."),
+        frac_part.req("missing floating part"),
     ))
+    .parse(i)?;
+    Ok((i, ((ipart as f32) + floating) * if negi { -1. } else { 1. }))
 }
 fn float<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Float> {
     let (i, val) = branch::alt((f32, ncm::map(nmc::i64, |n| n as f32)))
@@ -859,6 +856,20 @@ mod tests {
         let r = ctx.run_parser("-4.2", super::f32).unwrap();
         assert_eq!(r, -4.2);
     }
+
+    #[test]
+    fn parse_f32_negative_only() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser("-0.5", super::f32).unwrap();
+        assert_eq!(r, -0.5);
+    }
+
+    #[test]
+    fn parse_f32_negative_tkn() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser("-4.2", super::ws(super::f32)).unwrap();
+        assert_eq!(r, -4.2);
+    }
     #[test]
     fn parse_f32_zero() {
         let ctx = TestCtx::new();
@@ -907,6 +918,31 @@ mod tests {
                 .unwrap()
                 .into_inner(),
             Register::new(RegisterKind::Input, 0)
+        );
+    }
+    #[test]
+    fn parse_negative_constant() {
+        let ctx = TestCtx::new();
+        let r = ctx
+            .run_parser(".constf m(0.0, 0.5, 1.0, -0.5)", super::constant_decl)
+            .unwrap();
+        let vs = r
+            .value
+            .into_inner()
+            .as_float()
+            .unwrap()
+            .into_inner()
+            .iter()
+            .map(|f| f.into_inner())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            &vs,
+            &[
+                Float::new(0.0).unwrap(),
+                Float::new(0.5).unwrap(),
+                Float::new(1.0).unwrap(),
+                Float::new(-0.5).unwrap(),
+            ]
         );
     }
 }
