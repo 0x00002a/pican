@@ -400,7 +400,7 @@ mod lowering {
                 match self.target.get() {
                     RegisterBindTarget::Register(r) => Ok(match r.kind {
                         pican_core::register::RegisterKind::Input |
-                        pican_core::register::RegisterKind::Output => panic!("found alias for input or output, this should've been caught in an earlier pass"),
+                        pican_core::register::RegisterKind::Output if !ctx.ctx.opts.picasso_compat_bug_for_bug => panic!("found alias for input or output, this should've been caught in an earlier pass"),
                         _ => {
                             pib::BindingValue::Register(*r)
                         }

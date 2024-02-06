@@ -25,6 +25,7 @@ use nom::{
 use nom::{AsChar, Compare, InputLength, InputTake, InputTakeAtPosition};
 use nom_locate::LocatedSpan;
 use pican_core::alloc::Bump;
+use pican_core::context::PicanOptions;
 use pican_core::ir::{Float, HasSpan, SwizzleDim, SwizzleDims};
 use pican_core::ir::{IrNode, Span};
 use pican_core::properties::OutputProperty;
@@ -35,6 +36,7 @@ use pican_core::span::FileId;
 struct InputContext<'a> {
     area: &'a Bump,
     file: FileId,
+    opts: PicanOptions,
 }
 impl<'a> InputContext<'a> {
     #[allow(unused)]
@@ -490,27 +492,30 @@ fn output_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OutputBind<'a>> {
     ))
 }
 fn input_bind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, InputBind<'a>> {
-    let alias_version = ncm::verify(register_bind, |r| {
-        r.reg
-            .get()
-            .target
-            .get()
-            .as_register()
-            .filter(|r| r.kind == RegisterKind::Input)
-            .is_some()
-    })
-    .map(|r| InputBind {
-        ident: r.name,
-        register: Some(
+    // picasso doesn't notice .alias bindings that are inputs
+    if !i.extra.opts.picasso_compat_bug_for_bug {
+        let alias_version = ncm::verify(register_bind, |r| {
             r.reg
-                .into_inner()
+                .get()
                 .target
-                .map(|r| r.into_register().unwrap()),
-        ),
-    });
-    let (i, alias_v) = ncm::opt(alias_version)(i)?;
-    if let Some(v) = alias_v {
-        return Ok((i, v));
+                .get()
+                .as_register()
+                .filter(|r| r.kind == RegisterKind::Input)
+                .is_some()
+        })
+        .map(|r| InputBind {
+            ident: r.name,
+            register: Some(
+                r.reg
+                    .into_inner()
+                    .target
+                    .map(|r| r.into_register().unwrap()),
+            ),
+        });
+        let (i, alias_v) = ncm::opt(alias_version)(i)?;
+        if let Some(v) = alias_v {
+            return Ok((i, v));
+        }
     }
 
     let (i, _) = tag(".in")(i)?;
@@ -627,9 +632,17 @@ fn run_parser<'a, 'p, O>(
     arena: &'a Bump,
     input: &'p str,
     file: FileId,
+    opts: PicanOptions,
     mut parser: impl Parser<Input<'a, &'p str>, O, PError<'a, &'p str>>,
 ) -> Result<O, ErrorKind> {
-    let input = LocatedSpan::new_extra(input, InputContext { area: arena, file });
+    let input = LocatedSpan::new_extra(
+        input,
+        InputContext {
+            area: arena,
+            file,
+            opts,
+        },
+    );
     match parser.parse(input) {
         Ok((i, v)) => {
             if !i.is_empty() {
@@ -658,11 +671,17 @@ fn run_parser<'a, 'p, O>(
     }
 }
 
-pub fn parse<'a>(arena: &'a Bump, input: &str, file: FileId) -> Result<&'a [Stmt<'a>], ErrorKind> {
+pub fn parse<'a>(
+    arena: &'a Bump,
+    input: &str,
+    file: FileId,
+    opts: PicanOptions,
+) -> Result<&'a [Stmt<'a>], ErrorKind> {
     run_parser(
         arena,
         input,
         file,
+        opts,
         many0_in(
             nmc::multispace0
                 .ignore_then(nfo(stmt))
@@ -699,7 +718,7 @@ mod tests {
         fn parse<'a>(&'a self, input: &str) -> Result<&'a [Stmt<'a>], super::ErrorKind> {
             let mut db = Files::new();
             let id = db.add("test", input);
-            super::parse(&self.arena, input, id)
+            super::parse(&self.arena, input, id, Default::default())
         }
         fn run_parser<'a, 'p, O>(
             &'a self,
@@ -708,7 +727,7 @@ mod tests {
         ) -> Result<O, super::ErrorKind> {
             let mut db = Files::new();
             let id = db.add("test", input);
-            super::run_parser(&self.arena, input, id, parser)
+            super::run_parser(&self.arena, input, id, Default::default(), parser)
         }
     }
 

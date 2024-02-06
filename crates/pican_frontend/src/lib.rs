@@ -19,7 +19,7 @@ pub fn parse_and_lower<'a, S: AsRef<str>>(
     to: &'a IrContext,
 ) -> Option<pican_pir::ir::Module<'a>> {
     let arena = Bump::new();
-    let ast = match parse::parse(&arena, ctx.files.source(file).as_ref(), file) {
+    let ast = match parse::parse(&arena, ctx.files.source(file).as_ref(), file, ctx.opts) {
         Ok(ast) => ast,
         Err(e) => {
             let mut diag = DiagnosticBuilder::error();
@@ -40,5 +40,22 @@ pub fn parse_and_lower<'a, S: AsRef<str>>(
         None
     } else {
         Some(m)
+    }
+}
+
+pub trait PicanFrontendExt {
+    fn parse_and_lower<'a>(
+        &self,
+        file: FileId,
+        to: &'a IrContext,
+    ) -> Option<pican_pir::ir::Module<'a>>;
+}
+impl<S: AsRef<str>> PicanFrontendExt for PicanContext<S> {
+    fn parse_and_lower<'a>(
+        &self,
+        file: FileId,
+        to: &'a IrContext,
+    ) -> Option<pican_pir::ir::Module<'a>> {
+        parse_and_lower(file, self, to)
     }
 }

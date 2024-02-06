@@ -17,16 +17,6 @@ fn mk_picasso_conformance(prog_file: &Path, name: &String, bin_path: &Path) -> S
 
             assert_eq!(picasso_bin, pican_bin);
             assert_eq!(&input, &pican_input.as_slice());
-
-            /*println!("bin: {{bin:#?}}");
-            println!("-- instructions --\n{{}}", bin.dvlp.compiled_blob.iter().map(|i| format!("{{}}\n", i.to_asm(&bin.dvlp.operand_desc_table.data))).collect::<String>());
-
-            let mut w = Cursor::new(Vec::new());
-            bin.write_le(&mut w).unwrap();
-            let inner = w.into_inner();
-            let roundtrip: Shbin = Cursor::new(&inner).read_le().unwrap();
-            assert_eq!(bin, roundtrip);
-            assert_eq!(input, inner.as_slice());*/
         }
     }
     .to_string()

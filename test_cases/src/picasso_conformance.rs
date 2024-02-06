@@ -7,6 +7,7 @@ use pican_core::context::{IrContext, PicanContext};
 fn run_pican(input: &Path) -> Vec<u8> {
     assert!(input.exists(), "cannot find pican input: {input:?}");
     let mut ctx = PicanContext::new();
+    ctx.opts.picasso_compat_bug_for_bug = true;
     let input_id = ctx.add_file(
         input.as_os_str(),
         std::fs::read_to_string(input).expect("failed to read input"),
