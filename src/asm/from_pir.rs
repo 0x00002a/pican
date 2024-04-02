@@ -15,7 +15,7 @@ use super::{
     context::{AsmContext, BoundUniform, ConstantUniform, OutputInfo, ProcInfo},
     float24::Float24,
     instrs::InstructionPack,
-    ir::{self, FreeRegister, Instruction, ProcId, RegHole, RegHoleKind, RegisterId, Vec4},
+    ir::{self, Instruction, ProcId, RegHole, RegHoleKind, RegisterId, Vec4},
 };
 
 #[derive(Debug)]
@@ -395,8 +395,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     assert!(o.alias.is_some());
 
                     let r = if let Some(r) = o.register {
-                        let r = r.into_inner();
-                        r
+                        r.into_inner()
                     } else {
                         self.unif_regs
                             .allocate_diag(RegisterKind::Output, self.diag, &value)?

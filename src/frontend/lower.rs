@@ -425,7 +425,7 @@ mod lowering {
                     b.statements.map(|stmts| {
                         let mut ops = BumpVec::new_in(ctx.alloc);
                         for stmt in stmts.iter().filter(|st| !st.get().is_comment()) {
-                            match stmt
+                            let lowered = stmt
                                 .map(|st| {
                                     let Statement::Op(op) = st else {
                                         return ctx.ctx.diag.fatal(
@@ -437,8 +437,8 @@ mod lowering {
                                     };
                                     ctx.lower(op)
                                 })
-                                .transpose()
-                            {
+                                .transpose();
+                            match lowered {
                                 Ok(op) => {
                                     ops.push(op.concat());
                                 }

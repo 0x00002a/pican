@@ -1,10 +1,6 @@
-use std::{collections::HashMap, ops::Range};
+use std::collections::HashMap;
 
-use crate::{
-    ir::{Float, Ident},
-    properties::OutputProperty,
-    register::Register,
-};
+use crate::{ir::Ident, properties::OutputProperty, register::Register};
 use string_interner::StringInterner;
 
 use super::{

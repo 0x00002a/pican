@@ -1,23 +1,20 @@
-use std::{collections::HashMap, ops::Range};
+use std::collections::HashMap;
 
 use super::{
     context::{AsmContext, SymbolId},
-    float24::Float24,
-    instrs::{InstructionOffset, InstructionPack},
+    instrs::InstructionPack,
     ir::{self, RegisterId, SwizzleDims},
     shbin::{
         self,
         instruction::{OpCodeInstructionFormat, OperandDescriptor},
-        ConstantTableEntry, ExecutableSection, ExecutableSectionHeader, MaxSize, Shbin,
-        SymbolTable, UniformTableEntry,
+        ConstantTableEntry, ExecutableSection, ExecutableSectionHeader, Shbin, UniformTableEntry,
     },
 };
 
 use crate::{
     asm::context::ConstantUniform,
     copy_arrayvec::CopyArrayVec,
-    ir::SwizzleDim,
-    register::{Register, RegisterKind, RegisterType},
+    register::{RegisterKind, RegisterType},
 };
 use binrw::NullString;
 use shbin::instruction as shi;

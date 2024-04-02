@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumIter, EnumString, EnumVariantNames, IntoEnumIterator, VariantNames};
+use strum::{Display, EnumIter, EnumString, IntoEnumIterator, VariantNames};
 
 #[derive(
     EnumString,
     EnumIter,
-    EnumVariantNames,
+    VariantNames,
     Clone,
     Copy,
     Hash,
