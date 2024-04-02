@@ -161,7 +161,7 @@ impl FreeRegTracker {
     }
 }
 
-#[derive(Hash, Clone, Copy, PartialEq, Eq)]
+#[derive(Hash, Clone, Copy, PartialEq, Eq, Debug)]
 struct IdentKey<'a> {
     ident: Ident<'a>,
     index: Option<u32>,
@@ -223,7 +223,13 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                 )
             }
             BindingValue::Alias(i) => self.resolve_operand_ident(&ident.with_ident(i)),
-            _ => (*self.ident_to_reg.get(ident).unwrap(), None),
+            _ => (
+                *self
+                    .ident_to_reg
+                    .get(ident)
+                    .unwrap_or_else(|| panic!("ident to reg failed with {ident:?}")),
+                None,
+            ),
         }
     }
     fn lower_operand(
