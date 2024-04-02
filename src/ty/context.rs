@@ -11,7 +11,7 @@ use crate::{
 use super::{
     check,
     ops::OperandSlot,
-    ty::{ContextuallyTyped, Type},
+    {ContextuallyTyped, Type},
 };
 
 pub struct TyContext<'a, 'b> {

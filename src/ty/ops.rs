@@ -1,6 +1,6 @@
 use crate::ops::OpCode;
 
-use super::ty::{PrimTy, RegisterTy, Type, UniformArrayTy, VecUniformTy};
+use super::{PrimTy, RegisterTy, Type, UniformArrayTy, VecUniformTy};
 
 pub enum OperandWidth {
     Wide,
