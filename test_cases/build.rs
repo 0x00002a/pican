@@ -11,9 +11,9 @@ fn mk_picasso_conformance(prog_file: &Path, name: &String, bin_path: &Path) -> S
         #[test]
         fn #test_name () {
             let input = include_bytes!(#bin_path);
-            let picasso_bin: pican_asm::shbin::Shbin = std::io::Cursor::new(&input).read_le().unwrap();
+            let picasso_bin: pican::asm::shbin::Shbin = std::io::Cursor::new(&input).read_le().unwrap();
             let pican_input = run_pican(::std::path::Path::new(#prog_file));
-            let pican_bin: pican_asm::shbin::Shbin = std::io::Cursor::new(&pican_input).read_le().unwrap();
+            let pican_bin: pican::asm::shbin::Shbin = std::io::Cursor::new(&pican_input).read_le().unwrap();
 
             assert_eq!(picasso_bin, pican_bin);
             assert_eq!(&input, &pican_input.as_slice());
@@ -93,35 +93,36 @@ fn fmt_testname(prog_file: &Path) -> String {
 }
 
 fn mk_test(prog_file: &Path, typecheck_fail: bool) -> String {
-    format!(
-        r#"
-#[test]
-fn {name}_shouldnt_typecheck_{typecheck_fail}() {{
-    let mut ctx = PicanContext::new();
-    let input_id = ctx.add_file(
-        "{path}",
-        std::fs::read_to_string("{path}").expect("failed to read input"),
-    );
+    let name = fmt_testname(prog_file);
+    let test_name = format_ident!("{name}_shouldnt_typecheck_{typecheck_fail}");
+    let prog_file = prog_file.to_string_lossy();
+    quote::quote! {
+        #[test]
+        fn #test_name () {
+            let mut ctx = PicanContext::new();
+            let input = include_str!(#prog_file);
+            let input_id = ctx.add_file(
+                #prog_file,
+                input,
+            );
 
-    let pir_ctx = IrContext::new();
-    let pir = pican_frontend::parse_and_lower(input_id, &ctx, &pir_ctx);
+            let pir_ctx = IrContext::new();
+            let pir = pican::frontend::parse_and_lower(input_id, &ctx, &pir_ctx);
 
-    let Some(pir) = pir else {{
-        super::print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);
-        panic!("failed to produce PIR");
-    }};
-    let tycheck = ctx.types_for_module(&pir);
-    let ty_success = tycheck.check().is_ok();
-    let should_fail = if {typecheck_fail} {{ ty_success }} else {{ !ty_success }};
-    if should_fail {{
-        super::print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);
-        panic!("typecheck failed/passed incorrectly");
-    }}
-}}
-"#,
-        path = prog_file.display(),
-        name = fmt_testname(prog_file),
-    )
+            let Some(pir) = pir else {
+                super::print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);
+                panic!("failed to produce PIR");
+            };
+            let tycheck = ctx.types_for_module(&pir);
+            let ty_success = tycheck.check().is_ok();
+            let should_fail = if #typecheck_fail { ty_success } else { !ty_success };
+            if should_fail {
+                super::print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);
+                panic!("typecheck failed/passed incorrectly");
+            }
+        }
+    }
+    .to_string()
 }
 
 fn main() {
@@ -135,7 +136,14 @@ fn main() {
     let cases = programs
         .map(|p| (p, false))
         .chain(typecheck_fail.map(|p| (p, true)))
-        .map(|(p, c)| (p.expect("failed to get path to program file"), c))
+        .map(|(p, c)| {
+            (
+                p.expect("failed to get path to program file")
+                    .canonicalize()
+                    .unwrap(),
+                c,
+            )
+        })
         .map(|(p, c)| mk_test(&p, c))
         .collect::<Vec<_>>()
         .join("\n");
