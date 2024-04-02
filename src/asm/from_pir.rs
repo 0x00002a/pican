@@ -1,14 +1,17 @@
 use std::collections::HashMap;
 
-use crate::pir::{
-    bindings::BindingValue,
-    ir::{EntryPoint, InputBinding, Module, Operand},
-};
 use crate::{
     context::PicanContext,
     diagnostics::{DiagnosticBuilder, Diagnostics, FatalErrorEmitted},
     ir::{Float, HasSpan, Ident, IrNode, SwizzleDims},
     register::{Register, RegisterKind},
+};
+use crate::{
+    context::PicanOptions,
+    pir::{
+        bindings::BindingValue,
+        ir::{EntryPoint, InputBinding, Module, Operand},
+    },
 };
 
 use super::{
@@ -190,6 +193,7 @@ struct LowerCtx<'a, 'm, 'c> {
     regs: RegCache,
     ident_to_reg: HashMap<IdentKey<'a>, RegHole>,
     unif_regs: FreeRegTracker,
+    opts: PicanOptions,
 }
 impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
     fn lower_register(&mut self, r: Register) -> RegHole {
@@ -293,7 +297,9 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                 crate::pir::bindings::BindingValue::Register(r) => {
                     let r = *r;
                     match r.kind {
-                        RegisterKind::Input => self.asm_ctx.used_input_registers.mark_used(r),
+                        RegisterKind::Input if !self.opts.picasso_compat_bug_for_bug => {
+                            self.asm_ctx.used_input_registers.mark_used(r)
+                        }
                         RegisterKind::Output => self.asm_ctx.used_output_registers.mark_used(r),
                         _ => {}
                     }
@@ -468,6 +474,7 @@ pub fn from_pir<S: AsRef<str>>(
         regs: RegCache::default(),
         ident_to_reg: Default::default(),
         unif_regs: Default::default(),
+        opts: ctx.opts,
     }
     .lower()
 }
