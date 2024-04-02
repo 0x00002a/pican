@@ -1,13 +1,13 @@
 use std::{collections::HashMap, ops::Range};
 
-use pican_core::{
+use crate::{
     ir::{Float, Ident},
     properties::OutputProperty,
     register::Register,
 };
 use string_interner::StringInterner;
 
-use crate::{
+use super::{
     float24::Float24,
     instrs::InstructionOffset,
     ir::{ProcId, RegisterId, Vec4},

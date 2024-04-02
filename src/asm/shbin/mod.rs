@@ -8,7 +8,7 @@ use binrw::{
     binread, binrw, file_ptr::IntoSeekFrom, BinRead, BinReaderExt, BinResult, BinWrite,
     BinWriterExt, NamedArgs, NullString, VecArgs,
 };
-use pican_core::{
+use crate::{
     ops::OpCode,
     properties::OutputProperty,
     register::{Register, RegisterKind},
@@ -580,7 +580,7 @@ pub enum ShaderType {
 
 #[cfg(test)]
 mod tests {
-    use pican_core::register::{Register, RegisterKind};
+    use crate::register::{Register, RegisterKind};
 
     use super::IoRegisterBitMask;
 

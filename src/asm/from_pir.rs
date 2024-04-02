@@ -1,18 +1,18 @@
 use std::collections::HashMap;
 
-use pican_core::{
+use crate::pir::{
+    bindings::BindingValue,
+    ir::{EntryPoint, InputBinding, Module, Operand},
+};
+use crate::{
     context::PicanContext,
     diagnostics::{DiagnosticBuilder, Diagnostics, FatalErrorEmitted},
     ir::{Float, HasSpan, Ident, IrNode, SwizzleDims},
     register::{Register, RegisterKind},
 };
-use pican_pir::{
-    bindings::BindingValue,
-    ir::{EntryPoint, InputBinding, Module, Operand},
-};
 
-use crate::{
-    context::{AsmContext, BoundUniform, OutputInfo, ProcInfo},
+use super::{
+    context::{AsmContext, BoundUniform, ConstantUniform, OutputInfo, ProcInfo},
     float24::Float24,
     instrs::InstructionPack,
     ir::{self, FreeRegister, Instruction, ProcId, RegHole, RegHoleKind, RegisterId, Vec4},
@@ -235,11 +235,11 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
         }: &Operand<'a>,
     ) -> ir::Operand {
         let (register, swiz) = match kind.get() {
-            pican_pir::ir::OperandKind::Var(v) => self.resolve_operand_ident(&IdentKey::new(
+            crate::pir::ir::OperandKind::Var(v) => self.resolve_operand_ident(&IdentKey::new(
                 v.into_inner(),
                 relative_addr.map(|a| a.into_inner()),
             )),
-            pican_pir::ir::OperandKind::Register(r) => (self.lower_register(*r.get()), None),
+            crate::pir::ir::OperandKind::Register(r) => (self.lower_register(*r.get()), None),
         };
         let swizzle = swizzle
             .map(|s| s.into_inner())
@@ -284,7 +284,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
         for (name, value) in self.pir.bindings.entries() {
             let name = *name.get();
             match value.get() {
-                pican_pir::bindings::BindingValue::Register(r) => {
+                crate::pir::bindings::BindingValue::Register(r) => {
                     let r = *r;
                     match r.kind {
                         RegisterKind::Input => self.asm_ctx.used_input_registers.mark_used(r),
@@ -294,11 +294,11 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     let reg = self.lower_register(r);
                     self.ident_to_reg.insert(IdentKey::new(name, None), reg);
                 }
-                pican_pir::bindings::BindingValue::Uniform(u) => {
+                crate::pir::bindings::BindingValue::Uniform(u) => {
                     let kind = match u.ty.get() {
-                        pican_pir::ty::UniformTy::Bool => RegisterKind::BoolUniform,
-                        pican_pir::ty::UniformTy::Integer => RegisterKind::IntegerVecUniform,
-                        pican_pir::ty::UniformTy::Float => RegisterKind::FloatingVecUniform,
+                        crate::pir::ty::UniformTy::Bool => RegisterKind::BoolUniform,
+                        crate::pir::ty::UniformTy::Integer => RegisterKind::IntegerVecUniform,
+                        crate::pir::ty::UniformTy::Float => RegisterKind::FloatingVecUniform,
                     };
 
                     let (start, end) = if let Some(dim) = u.dimension {
@@ -331,9 +331,9 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                         end_register: end,
                     })
                 }
-                pican_pir::bindings::BindingValue::Constant(c) => {
+                crate::pir::bindings::BindingValue::Constant(c) => {
                     let (kind, v) = match c {
-                        pican_pir::ir::ConstantUniform::Integer(i) => {
+                        crate::pir::ir::ConstantUniform::Integer(i) => {
                             let i = i.get();
                             let conv_i = |i: IrNode<i32>| -> Result<i8, FatalErrorEmitted> {
                                 i.into_inner().try_into().map_err(|_| {
@@ -344,7 +344,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                             };
                             (
                                 RegisterKind::IntegerVecUniform,
-                                crate::context::ConstantUniform::IVec(Vec4::new(
+                                ConstantUniform::IVec(Vec4::new(
                                     conv_i(i[0])?,
                                     conv_i(i[1])?,
                                     conv_i(i[2])?,
@@ -352,7 +352,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                                 )),
                             )
                         }
-                        pican_pir::ir::ConstantUniform::Float(i) => {
+                        crate::pir::ir::ConstantUniform::Float(i) => {
                             let i = i.get();
                             let conv_f = |i: IrNode<Float>| -> Result<Float24, FatalErrorEmitted> {
                                 i.into_inner().try_into().map_err(|e| {
@@ -370,7 +370,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                             };
                             (
                                 RegisterKind::FloatingVecUniform,
-                                crate::context::ConstantUniform::FVec(Vec4::new(
+                                ConstantUniform::FVec(Vec4::new(
                                     conv_f(i[0])?,
                                     conv_f(i[1])?,
                                     conv_f(i[2])?,
@@ -378,7 +378,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                                 )),
                             )
                         }
-                        pican_pir::ir::ConstantUniform::FloatArray(_) => todo!(),
+                        crate::pir::ir::ConstantUniform::FloatArray(_) => todo!(),
                     };
 
                     let id = self.regs.next_reg_id();
@@ -391,7 +391,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     let r = self.lower_register(reg);
                     self.ident_to_reg.insert(IdentKey::new(name, None), r);
                 }
-                pican_pir::bindings::BindingValue::OutputProperty(o) => {
+                crate::pir::bindings::BindingValue::OutputProperty(o) => {
                     assert!(o.alias.is_some());
 
                     let r = if let Some(r) = o.register {
@@ -410,7 +410,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     });
                     self.ident_to_reg.insert(IdentKey::new(name, None), reg);
                 }
-                pican_pir::bindings::BindingValue::Input(
+                crate::pir::bindings::BindingValue::Input(
                     i @ InputBinding {
                         name,
                         index,
@@ -432,9 +432,9 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     })
                 }
 
-                pican_pir::bindings::BindingValue::SwizzleRegister(_)
-                | pican_pir::bindings::BindingValue::SwizzleVar(_)
-                | pican_pir::bindings::BindingValue::Alias(_) => {}
+                crate::pir::bindings::BindingValue::SwizzleRegister(_)
+                | crate::pir::bindings::BindingValue::SwizzleVar(_)
+                | crate::pir::bindings::BindingValue::Alias(_) => {}
             }
         }
         for ent in self.pir.entry_points {

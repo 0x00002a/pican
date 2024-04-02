@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use pican_core::{
+use crate::{
     copy_arrayvec::CopyArrayVec,
     ir::{Float, Ident, IrNode, SwizzleDims},
     ops::OpCode,
@@ -8,7 +8,7 @@ use pican_core::{
     register::Register,
 };
 
-use crate::ty::UniformTy;
+use super::ty::UniformTy;
 
 use super::bindings::Bindings;
 

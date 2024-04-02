@@ -4,12 +4,12 @@ use codespan_reporting::{
     files::Files,
     term::{self, termcolor::StandardStream, Config},
 };
-use pican_core::{
+use pican::{
     context::{IrContext, PicanContext},
+    frontend::parse_and_lower,
     span::FileId,
+    ty::PicanTyCheck,
 };
-use pican_frontend::parse_and_lower;
-use pican_ty::PicanTyCheck;
 
 mod args;
 

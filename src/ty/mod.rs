@@ -1,6 +1,6 @@
 use context::TyContext;
-use pican_core::context::PicanContext;
-use pican_pir::ir::Module;
+use crate::context::PicanContext;
+use crate::pir::ir::Module;
 
 pub mod check;
 pub mod context;

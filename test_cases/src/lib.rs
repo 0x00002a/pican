@@ -3,7 +3,7 @@ use codespan_reporting::{
     files::Files,
     term::{self, termcolor::StandardStream, Config},
 };
-use pican_core::span::FileId;
+use pican::span::FileId;
 
 mod all_programs_compile;
 mod picasso_conformance;

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Range};
 
-use crate::{
+use super::{
     context::{AsmContext, SymbolId},
     float24::Float24,
     instrs::{InstructionOffset, InstructionPack},
@@ -13,12 +13,13 @@ use crate::{
     },
 };
 
-use binrw::NullString;
-use pican_core::{
+use crate::{
+    asm::context::ConstantUniform,
     copy_arrayvec::CopyArrayVec,
     ir::SwizzleDim,
     register::{Register, RegisterKind, RegisterType},
 };
+use binrw::NullString;
 use shbin::instruction as shi;
 
 pub fn lower_to_shbin(ctx: &AsmContext, instrs: &InstructionPack) -> shbin::Shbin {
@@ -203,7 +204,7 @@ impl LowerCtx {
                             assert_eq!(r, e, "wrong register type allocated for constant");
                         }
                         match c {
-                            crate::context::ConstantUniform::IVec(i) => {
+                            ConstantUniform::IVec(i) => {
                                 check_ty(r.kind, RegisterKind::IntegerVecUniform);
                                 ConstantTableEntry::IVec4 {
                                     register_id,
@@ -213,7 +214,7 @@ impl LowerCtx {
                                     w: i.w,
                                 }
                             }
-                            crate::context::ConstantUniform::FVec(f) => {
+                            ConstantUniform::FVec(f) => {
                                 check_ty(r.kind, RegisterKind::FloatingVecUniform);
                                 ConstantTableEntry::Vec4 {
                                     register_id,
@@ -223,7 +224,7 @@ impl LowerCtx {
                                     w: f.w,
                                 }
                             }
-                            crate::context::ConstantUniform::Bool(_) => todo!(),
+                            ConstantUniform::Bool(_) => todo!(),
                         }
                     })
                     .collect::<Vec<_>>()

@@ -1,9 +1,9 @@
 use std::ops::Range;
 
-use pican_core::copy_arrayvec::CopyArrayVec;
+use crate::copy_arrayvec::CopyArrayVec;
 use serde::{Deserialize, Serialize};
 
-use crate::{ir::Instruction, MAX_SHBIN_INSTRUCTIONS};
+use super::{ir::Instruction, MAX_SHBIN_INSTRUCTIONS};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct InstructionOffset(usize);

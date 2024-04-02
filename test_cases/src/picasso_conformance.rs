@@ -1,8 +1,10 @@
 use binrw::BinReaderExt;
 use std::path::Path;
 
-use pican_asm as pasm;
-use pican_core::context::{IrContext, PicanContext};
+use pican::{
+    asm as pasm,
+    context::{IrContext, PicanContext},
+};
 
 fn run_pican(input: &Path) -> Vec<u8> {
     assert!(input.exists(), "cannot find pican input: {input:?}");
@@ -14,7 +16,7 @@ fn run_pican(input: &Path) -> Vec<u8> {
     );
 
     let pir_ctx = IrContext::new();
-    let pir = pican_frontend::parse_and_lower(input_id, &ctx, &pir_ctx).unwrap();
+    let pir = pican::frontend::parse_and_lower(input_id, &ctx, &pir_ctx).unwrap();
 
     let Ok((actx, instrs)) = pasm::from_pir::from_pir(&pir, &ctx) else {
         super::print_diagnostics(&ctx.diag.as_codespan(), &ctx.files);

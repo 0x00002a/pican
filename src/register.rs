@@ -60,7 +60,7 @@ impl RegisterKind {
     /// Check if register can be used as a given type
     ///
     /// ```
-    /// use pican_core::register::{RegisterType, RegisterKind};
+    /// use pican::register::{RegisterType, RegisterKind};
     /// assert!(RegisterKind::Input.is_type(RegisterType::Input));
     /// assert!(!RegisterKind::Output.is_type(RegisterType::Input));
     /// assert!(RegisterKind::Scratch.is_type(RegisterType::Input));

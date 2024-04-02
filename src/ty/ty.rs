@@ -1,12 +1,12 @@
-use pican_core::{
+use crate::{
     diagnostics::FatalErrorEmitted,
     ir::{Ident, IrNode},
+    pir::ir::Operand,
     register::RegisterKind,
 };
-use pican_pir::ir::Operand;
 use typesum::sumtype;
 
-use crate::context::TyContext;
+use super::context::TyContext;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[sumtype]
@@ -74,12 +74,12 @@ pub(crate) trait Typed {
     fn ty(&self) -> Type;
 }
 
-impl<'a> ContextuallyTyped<'a> for IrNode<pican_pir::bindings::BindingValue<'a>> {
+impl<'a> ContextuallyTyped<'a> for IrNode<crate::pir::bindings::BindingValue<'a>> {
     fn ty_with_ctx<'b>(
         &self,
         ctx: &TyContext<'a, 'b>,
-    ) -> Result<Type, pican_core::diagnostics::FatalErrorEmitted> {
-        use pican_pir::bindings::BindingValue;
+    ) -> Result<Type, crate::diagnostics::FatalErrorEmitted> {
+        use crate::pir::bindings::BindingValue;
         match self.get() {
             BindingValue::Register(r) => ctx.type_of(&r.kind),
             BindingValue::Uniform(u) => ctx.type_of(u),
@@ -105,23 +105,23 @@ impl<'a> ContextuallyTyped<'a> for IrNode<Ident<'a>> {
 impl<'a> ContextuallyTyped<'a> for Operand<'a> {
     fn ty_with_ctx<'b>(&self, ctx: &TyContext<'a, 'b>) -> Result<Type, FatalErrorEmitted> {
         match self.kind.get() {
-            pican_pir::ir::OperandKind::Var(v) => ctx.type_of(v),
-            pican_pir::ir::OperandKind::Register(r) => ctx.type_of(&r.get().kind),
+            crate::pir::ir::OperandKind::Var(v) => ctx.type_of(v),
+            crate::pir::ir::OperandKind::Register(r) => ctx.type_of(&r.get().kind),
         }
     }
 }
 
-impl<'a, T: Typed> Typed for pican_pir::bindings::SwizzleValue<'a, T> {
+impl<'a, T: Typed> Typed for crate::pir::bindings::SwizzleValue<'a, T> {
     fn ty(&self) -> Type {
         self.target.get().ty()
     }
 }
-impl Typed for pican_pir::ir::Uniform {
+impl Typed for crate::pir::ir::Uniform {
     fn ty(&self) -> Type {
         let prim = match self.ty.get() {
-            pican_pir::ty::UniformTy::Bool => PrimTy::Bool,
-            pican_pir::ty::UniformTy::Integer => PrimTy::Integer,
-            pican_pir::ty::UniformTy::Float => PrimTy::Float,
+            crate::pir::ty::UniformTy::Bool => PrimTy::Bool,
+            crate::pir::ty::UniformTy::Integer => PrimTy::Integer,
+            crate::pir::ty::UniformTy::Float => PrimTy::Float,
         };
         if let Some(len) = self.dimension {
             UniformArrayTy {
@@ -158,16 +158,16 @@ impl Typed for RegisterKind {
     }
 }
 
-impl<'a> Typed for pican_pir::ir::ConstantUniform<'a> {
+impl<'a> Typed for crate::pir::ir::ConstantUniform<'a> {
     fn ty(&self) -> Type {
         match self {
-            pican_pir::ir::ConstantUniform::Integer(_) => {
+            crate::pir::ir::ConstantUniform::Integer(_) => {
                 RegisterTy::new(PrimTy::Integer, RegisterKind::Input).into()
             }
-            pican_pir::ir::ConstantUniform::Float(_) => {
+            crate::pir::ir::ConstantUniform::Float(_) => {
                 RegisterTy::new(PrimTy::Float, RegisterKind::Input).into()
             }
-            pican_pir::ir::ConstantUniform::FloatArray(a) => UniformArrayTy {
+            crate::pir::ir::ConstantUniform::FloatArray(a) => UniformArrayTy {
                 len: a.get().len(),
                 element_ty: PrimTy::Float,
             }

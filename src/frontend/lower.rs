@@ -1,11 +1,11 @@
-use pican_core::{
+use crate::{
     context::{IrContext, PicanContext},
     diagnostics::FatalErrorEmitted,
 };
 
-use pican_pir as pir;
+use crate::pir;
 
-use crate::ast;
+use super::ast;
 
 pub trait FrontendToPirCtx {
     fn lower<'a, S: AsRef<str>>(
@@ -33,7 +33,7 @@ impl FrontendToPirCtx for IrContext {
 
 mod lowering {
 
-    use pican_core::{
+    use crate::{
         alloc::{Bump, BumpVec},
         context::PicanContext,
         copy_arrayvec::CopyArrayVec,
@@ -41,12 +41,12 @@ mod lowering {
         ir::{Ident, IrNode, SwizzleDim, SwizzleDims},
     };
 
-    use crate::ast::{
+    use crate::frontend::ast::{
         Constant, FunctionDecl, InputBind, Op, Operand, OperandKind, Operands, OutputBind,
         RegisterBindTarget, Statement, SwizzleExpr, UniformTy,
     };
-    use pican_pir::bindings::{self as pib, SwizzleValue};
-    use pican_pir::ir as pir;
+    use crate::pir::bindings::{self as pib, SwizzleValue};
+    use crate::pir::ir as pir;
 
     pub struct PirLower<'a, 'c, S: AsRef<str>> {
         alloc: &'a Bump,
@@ -177,14 +177,14 @@ mod lowering {
                     Ok(())
                 }
                 Statement::Directive(d) => match d.get() {
-                    crate::ast::Directive::NoDvle => {
+                    super::ast::Directive::NoDvle => {
                         self.no_dvle = true;
                         Ok(())
                     }
-                    crate::ast::Directive::Entry(_) => {
+                    super::ast::Directive::Entry(_) => {
                         todo!("handle entrypoint for shader")
                     }
-                    crate::ast::Directive::Gsh => todo!("handle geometry shaders"),
+                    super::ast::Directive::Gsh => todo!("handle geometry shaders"),
                 },
             }
         }
@@ -263,13 +263,13 @@ mod lowering {
     }
 
     impl Lower for UniformTy {
-        type Pir<'a> = pican_pir::ty::UniformTy;
+        type Pir<'a> = crate::pir::ty::UniformTy;
 
         fn lower<'a, S: AsRef<str>>(
             self,
             _ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
-            use pican_pir::ty as pit;
+            use crate::pir::ty as pit;
             let t = match self {
                 UniformTy::Bool => pit::UniformTy::Bool,
                 UniformTy::Integer => pit::UniformTy::Integer,
@@ -399,8 +399,8 @@ mod lowering {
             } else {
                 match self.target.get() {
                     RegisterBindTarget::Register(r) => Ok(match r.kind {
-                        pican_core::register::RegisterKind::Input |
-                        pican_core::register::RegisterKind::Output if !ctx.ctx.opts.picasso_compat_bug_for_bug => panic!("found alias for input or output, this should've been caught in an earlier pass"),
+                        crate::register::RegisterKind::Input |
+                        crate::register::RegisterKind::Output if !ctx.ctx.opts.picasso_compat_bug_for_bug => panic!("found alias for input or output, this should've been caught in an earlier pass"),
                         _ => {
                             pib::BindingValue::Register(*r)
                         }

@@ -1,16 +1,16 @@
 use std::io::{Seek, Write};
 
-use binrw::{binrw, BinRead, BinReaderExt, BinWrite, BinWriterExt};
-use modular_bitfield::prelude::*;
-use pican_core::{
+use crate::{
     ir::SwizzleDim,
     ops::OpCode,
     register::{Register, RegisterKind},
 };
+use binrw::{binrw, BinRead, BinReaderExt, BinWrite, BinWriterExt};
+use modular_bitfield::prelude::*;
 use strum::EnumDiscriminants;
 use typesum::sumtype;
 
-use crate::ir::SwizzleDims;
+use crate::asm::ir::SwizzleDims;
 
 const OPCODE_OFFSET: u32 = 0x1a;
 
@@ -37,10 +37,10 @@ impl From<SwizzleDims> for ComponentMask {
                 .with_z(false)
                 .with_w(false),
             |s, v| match v {
-                pican_core::ir::SwizzleDim::X => s.with_x(true),
-                pican_core::ir::SwizzleDim::Y => s.with_y(true),
-                pican_core::ir::SwizzleDim::Z => s.with_z(true),
-                pican_core::ir::SwizzleDim::W => s.with_w(true),
+                crate::ir::SwizzleDim::X => s.with_x(true),
+                crate::ir::SwizzleDim::Y => s.with_y(true),
+                crate::ir::SwizzleDim::Z => s.with_z(true),
+                crate::ir::SwizzleDim::W => s.with_w(true),
             },
         )
     }
@@ -755,10 +755,10 @@ instructs! {
 mod tests {
     use std::io::Cursor;
 
+    use crate::{copy_arrayvec::CopyArrayVec, ir::SwizzleDim, ops::OpCode};
     use binrw::{BinRead, BinWriterExt};
-    use pican_core::{copy_arrayvec::CopyArrayVec, ir::SwizzleDim, ops::OpCode};
 
-    use crate::shbin::instruction::{Component, ComponentSelector};
+    use crate::asm::shbin::instruction::{Component, ComponentSelector};
 
     use super::{Instruction, Operands};
 

@@ -1,13 +1,20 @@
 use super::ast::Stmt;
-use crate::ast::{
+use super::ast::{
     self, Block, Constant, ConstantDecl, ConstantDiscriminants, Directive, FunctionDecl, Ident,
-    InputBind, Op, OpCode, Operand, OperandKind, Operands, OutputBind, RegisterBind,
-    RegisterBindTarget, Statement, SwizzleExpr, Uniform, UniformDecl, UniformTy,
+    InputBind, Op, OpCode, Operand, OperandKind, Operands, OutputBind, RegisterBind, Statement,
+    SwizzleExpr, Uniform, UniformDecl, UniformTy,
 };
-use crate::parse_ext::ParserExt;
+use super::parse_ext::ParserExt;
 
 use nom::character::complete::{self as nmc};
 
+use crate::alloc::Bump;
+use crate::context::PicanOptions;
+use crate::ir::{Float, HasSpan, SwizzleDim, SwizzleDims};
+use crate::ir::{IrNode, Span};
+use crate::properties::OutputProperty;
+use crate::register::{Register, RegisterKind};
+use crate::span::FileId;
 use nom::multi::{fold_many0, many0_count, many1, many_till};
 use nom::sequence::tuple;
 use nom::{
@@ -24,13 +31,6 @@ use nom::{
 };
 use nom::{AsChar, Compare, InputLength, InputTake, InputTakeAtPosition};
 use nom_locate::LocatedSpan;
-use pican_core::alloc::Bump;
-use pican_core::context::PicanOptions;
-use pican_core::ir::{Float, HasSpan, SwizzleDim, SwizzleDims};
-use pican_core::ir::{IrNode, Span};
-use pican_core::properties::OutputProperty;
-use pican_core::register::{Register, RegisterKind};
-use pican_core::span::FileId;
 
 #[derive(Clone, Copy)]
 struct InputContext<'a> {
@@ -154,12 +154,12 @@ where
 }
 fn many0_in<'a, T: Clone + InputLength, O, E: ParseError<Input<'a, T>>>(
     mut f: impl Parser<Input<'a, T>, O, E>,
-) -> impl Parser<Input<'a, T>, pican_core::alloc::collections::Vec<'a, O>, E> {
+) -> impl Parser<Input<'a, T>, crate::alloc::collections::Vec<'a, O>, E> {
     move |i: Input<'a, T>| {
         let f = |i| f.parse(i);
         fold_many0(
             f,
-            || pican_core::alloc::collections::Vec::new_in(i.extra.area),
+            || crate::alloc::collections::Vec::new_in(i.extra.area),
             |mut acc, item| {
                 acc.push(item);
                 acc
@@ -248,7 +248,7 @@ fn ident_word<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, &'a str> {
     }
     let (i, _) = ncm::peek(ident_char)(i)?;
     let (i, word) = many1(ident_char.or(nmc::satisfy(|ch| ch.is_dec_digit())))(i)?;
-    let word = pican_core::alloc::collections::String::from_iter_in(word, i.extra.area);
+    let word = crate::alloc::collections::String::from_iter_in(word, i.extra.area);
     Ok((i, word.into_bump_str()))
 }
 fn register<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, Register> {
@@ -694,15 +694,15 @@ pub fn parse<'a>(
 mod tests {
     use std::str::FromStr;
 
-    use nom::{character::complete::satisfy, combinator::eof, Parser};
-    use pican_core::span::Files;
-    use pican_core::{
+    use crate::span::Files;
+    use crate::{
         alloc::Bump,
         register::{Register, RegisterKind},
     };
-    use pican_core::{ir::Float, properties::OutputProperty};
+    use crate::{ir::Float, properties::OutputProperty};
+    use nom::{character::complete::satisfy, combinator::eof, Parser};
 
-    use crate::ast::{OpCode, Stmt, UniformTy};
+    use super::ast::{OpCode, Stmt, UniformTy};
 
     use super::{Input, PError};
 

@@ -1,8 +1,9 @@
-use pican_core::diagnostics::FatalErrorEmitted;
-use pican_pir as pir;
+use crate::diagnostics::FatalErrorEmitted;
+use crate::pir;
 use pir::ir::Op;
 
-use crate::{context::TyContext, ops::slots_for_opcode};
+use super::context::TyContext;
+use super::ops::slots_for_opcode;
 
 pub(crate) fn check_operation<'a>(
     op: &Op<'a>,

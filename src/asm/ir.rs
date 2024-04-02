@@ -1,4 +1,4 @@
-use pican_core::{
+use crate::{
     copy_arrayvec::CopyArrayVec,
     ir::SwizzleDim,
     ops::OpCode,

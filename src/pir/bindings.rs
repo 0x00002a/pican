@@ -1,14 +1,12 @@
-use std::collections::HashMap;
-
-use indexmap::IndexMap;
-use pican_core::{
+use crate::{
     diagnostics::{DiagnosticBuilder, Diagnostics, FatalErrorEmitted},
     ir::{Ident, IrNode, SwizzleDims},
     register::Register,
 };
+use indexmap::IndexMap;
 use serde::Serialize;
 
-use crate::ir::{ConstantUniform, InputBinding, OutputBinding, Uniform};
+use super::ir::{ConstantUniform, InputBinding, OutputBinding, Uniform};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
 struct Binding<'a> {

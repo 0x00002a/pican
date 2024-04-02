@@ -1,5 +1,5 @@
 use binrw::{BinReaderExt, BinWrite};
-use pican_asm::shbin::Shbin;
+use pican::asm::shbin::Shbin;
 use pretty_assertions::assert_eq;
 use std::io::Cursor;
 

@@ -1,7 +1,7 @@
 use binrw::BinRead;
 use std::io::Cursor;
 
-use pican_asm::shbin::Shbin;
+use pican::asm::shbin::Shbin;
 
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();

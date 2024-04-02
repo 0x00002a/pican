@@ -1,14 +1,14 @@
-use pican_core::{
+use crate::{
     diagnostics::{DiagnosticBuilder, Diagnostics, FatalErrorEmitted},
     ir::{Ident, IrNode},
     ops::OpCode,
-};
-use pican_pir::{
-    bindings::BindingValue,
-    ir::{Module, Operand},
+    pir::{
+        bindings::BindingValue,
+        ir::{Module, Operand},
+    },
 };
 
-use crate::{
+use super::{
     check,
     ops::OperandSlot,
     ty::{ContextuallyTyped, Type},

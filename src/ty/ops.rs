@@ -1,6 +1,6 @@
-use pican_core::ops::OpCode;
+use crate::ops::OpCode;
 
-use crate::ty::{PrimTy, RegisterTy, Type, UniformArrayTy, VecUniformTy};
+use super::ty::{PrimTy, RegisterTy, Type, UniformArrayTy, VecUniformTy};
 
 pub enum OperandWidth {
     Wide,
@@ -23,13 +23,13 @@ impl OperandTy {
                 let Type::Register(RegisterTy { kind, .. }) = ty else {
                     return false;
                 };
-                kind.is_type(pican_core::register::RegisterType::Output)
+                kind.is_type(crate::register::RegisterType::Output)
             }
             OperandTy::SrcReg => {
                 let Type::Register(RegisterTy { kind, .. }) = ty else {
                     return false;
                 };
-                kind.is_type(pican_core::register::RegisterType::Input)
+                kind.is_type(crate::register::RegisterType::Input)
             }
             OperandTy::WideSrc => {
                 OperandTy::SrcReg.matches(ty) || {

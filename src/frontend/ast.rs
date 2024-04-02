@@ -1,11 +1,11 @@
-use pican_core::properties::OutputProperty;
-use pican_core::register::Register;
+use crate::properties::OutputProperty;
+use crate::register::Register;
 use serde::Serialize;
 
-use pican_core::ir::{Float, IrNode, SwizzleDims};
+use crate::ir::{Float, IrNode, SwizzleDims};
 
-pub use pican_core::ir::Ident;
-pub use pican_core::ops::OpCode;
+pub use crate::ir::Ident;
+pub use crate::ops::OpCode;
 use strum::EnumDiscriminants;
 use typesum::sumtype;
 

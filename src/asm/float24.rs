@@ -1,4 +1,4 @@
-use pican_core::ir::Float;
+use crate::ir::Float;
 
 /// 24-bit floating-point representation used by the PICA200
 ///
@@ -126,7 +126,7 @@ impl TryFrom<Float> for Float24 {
 mod tests {
     use assert_matches::assert_matches;
 
-    use crate::float24::{split_up_float, Float24};
+    use crate::asm::float24::{split_up_float, Float24};
 
     #[test]
     fn f32_to_f24_preserves_negatives() {
