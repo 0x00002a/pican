@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 binrw = "0.13.3"
-pican_asm = { path = "../../crates/pican_asm", version = "0.1.0" }
+pican = { path = "../.." }
