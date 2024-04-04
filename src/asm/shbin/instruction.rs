@@ -20,13 +20,13 @@ const OPCODE_OFFSET: u32 = 0x1a;
 #[bw(map = |&x| Self::into_bytes(x))]
 pub struct ComponentMask {
     #[bits = 1]
-    w: bool,
+    pub w: bool,
     #[bits = 1]
-    z: bool,
+    pub z: bool,
     #[bits = 1]
-    y: bool,
+    pub y: bool,
     #[bits = 1]
-    x: bool,
+    pub x: bool,
 }
 impl From<SwizzleDims> for ComponentMask {
     fn from(value: SwizzleDims) -> Self {
@@ -108,12 +108,12 @@ impl From<SwizzleDim> for Component {
 }
 
 #[bitfield]
-#[derive(Debug, BitfieldSpecifier, PartialEq, Eq)]
+#[derive(Debug, BitfieldSpecifier, PartialEq, Eq, Clone, Copy)]
 pub struct ComponentSelector {
-    w: Component,
-    z: Component,
-    y: Component,
-    x: Component,
+    pub w: Component,
+    pub z: Component,
+    pub y: Component,
+    pub x: Component,
 }
 impl std::fmt::Display for ComponentSelector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -170,9 +170,9 @@ impl Default for ComponentSelector {
 #[derive(Debug, BitfieldSpecifier)]
 pub struct OperandSource {
     #[bits = 1]
-    negate: bool,
+    pub negate: bool,
     #[bits = 8]
-    selector: ComponentSelector,
+    pub selector: ComponentSelector,
 }
 impl Default for OperandSource {
     fn default() -> Self {
@@ -201,6 +201,11 @@ pub struct OperandDescriptor {
     pub s3: OperandSource,
     #[skip]
     _unknown: B33,
+}
+impl OperandDescriptor {
+    pub fn as_u64(self) -> u64 {
+        u64::from_le_bytes(self.into_bytes())
+    }
 }
 
 #[bitfield(bits = 32)]
@@ -760,7 +765,7 @@ mod tests {
 
     use crate::asm::shbin::instruction::{Component, ComponentSelector};
 
-    use super::{Instruction, Operands};
+    use super::{ComponentMask, Instruction, OperandDescriptor, OperandSource, Operands};
 
     #[test]
     fn instr_roundtrip() {

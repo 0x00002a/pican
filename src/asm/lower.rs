@@ -25,20 +25,107 @@ pub fn lower_to_shbin(ctx: &AsmContext, instrs: &InstructionPack) -> shbin::Shbi
 
 pub const MAX_SHBIN_DESCRIPTORS: usize = 128;
 
+#[derive(Clone, Copy)]
+struct OpdescMask {
+    component: bool,
+    s1: bool,
+    s2: bool,
+    s3: bool,
+}
+impl OpdescMask {
+    const fn as_u64(self) -> u64 {
+        let c = if self.component { 0xF } else { 0 };
+        let s1 = if self.s1 { 0x1FF } else { 0 };
+        let s2 = if self.s2 { 0x1FF } else { 0 };
+        let s3 = if self.s3 { 0x1FF } else { 0 };
+        // this is the integer for of an operand descriptor
+        c | (s1 << 4) | (s2 << 13) | (s3 << 22)
+    }
+}
+impl std::ops::BitAnd for OpdescMask {
+    type Output = OpdescMask;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self {
+            component: self.component && rhs.component,
+            s1: self.s1 && rhs.s1,
+            s2: self.s2 && rhs.s2,
+            s3: self.s3 && rhs.s3,
+        }
+    }
+}
+
+impl std::ops::BitOr for OpdescMask {
+    type Output = OpdescMask;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self {
+            component: self.component || rhs.component,
+            s1: self.s1 || rhs.s1,
+            s2: self.s2 || rhs.s2,
+            s3: self.s3 || rhs.s3,
+        }
+    }
+}
+
+const OPDESC_MASK_DST_SRC: OpdescMask = OpdescMask {
+    component: true,
+    s1: true,
+    s2: false,
+    s3: false,
+};
+
+const OPDESC_MASK_DST_SRC_SRC: OpdescMask = OpdescMask {
+    component: true,
+    s1: true,
+    s2: true,
+    s3: false,
+};
+
+const OPDESC_MASK_DST_SRC_SRC_SRC: OpdescMask = OpdescMask {
+    component: true,
+    s1: true,
+    s2: true,
+    s3: true,
+};
+
+impl OperandDescriptor {
+    fn compatible_with(self, other: OperandDescriptor, mask: OpdescMask) -> bool {
+        let mask = mask.as_u64();
+        other.as_u64() & mask == self.as_u64() & mask
+    }
+}
+
 #[derive(Default)]
 struct LowerCtx {
     descriptors: CopyArrayVec<shi::OperandDescriptor, MAX_SHBIN_DESCRIPTORS>,
+    masks: CopyArrayVec<OpdescMask, MAX_SHBIN_DESCRIPTORS>,
 }
 
 impl LowerCtx {
-    fn add_desc(&mut self, desc: OperandDescriptor) -> u8 {
+    fn add_desc(&mut self, (desc, mask): (OperandDescriptor, OpdescMask)) -> u8 {
+        for i in 0..self.descriptors.len() {
+            let c_desc = self.descriptors[i];
+            let min_mask = self.masks[i] & mask;
+            if c_desc.compatible_with(desc, min_mask) {
+                self.descriptors[i] = desc;
+                self.masks[i] = self.masks[i] | mask;
+                return i as u8;
+            }
+        }
+        let offset = self.descriptors.len() as u8;
+        self.descriptors.push(desc);
+        self.masks.push(mask);
+        offset
+
+        /*
         if let Some(offset) = self.descriptors.iter().position(|d| d == &desc) {
             offset as u8
         } else {
             let offset = self.descriptors.len() as u8;
             self.descriptors.push(desc);
             offset
-        }
+        }*/
     }
     //fn conv_operand(&mut self, dst: Option<ir::Operand>, src1: Option<ir::Operand>, src2: Option<ir::Operand>, src3: Option<ir::Operand>, )
     fn convert_operands(
@@ -47,17 +134,23 @@ impl LowerCtx {
         ty: shi::InstructionFormatKind,
     ) -> shi::Operands {
         let two_arg_desc = || {
-            shi::OperandDescriptor::new()
-                .with_destination_mask(operands[0].swizzle.into())
-                .with_s1(operands[1].swizzle.into())
-                .with_s2(operands[2].swizzle.into())
+            (
+                shi::OperandDescriptor::new()
+                    .with_destination_mask(operands[0].swizzle.into())
+                    .with_s1(operands[1].swizzle.into())
+                    .with_s2(operands[2].swizzle.into()),
+                OPDESC_MASK_DST_SRC_SRC,
+            )
         };
         let mad_desc = || {
-            shi::OperandDescriptor::new()
-                .with_destination_mask(operands[0].swizzle.into())
-                .with_s1(operands[1].swizzle.into())
-                .with_s2(operands[2].swizzle.into())
-                .with_s3(operands[3].swizzle.into())
+            (
+                shi::OperandDescriptor::new()
+                    .with_destination_mask(operands[0].swizzle.into())
+                    .with_s1(operands[1].swizzle.into())
+                    .with_s2(operands[2].swizzle.into())
+                    .with_s3(operands[3].swizzle.into()),
+                OPDESC_MASK_DST_SRC_SRC_SRC,
+            )
         };
         let resolve_reg = |idx: usize| {
             match operands[idx].register.kind {
@@ -107,11 +200,12 @@ impl LowerCtx {
                 }
             }
             shi::InstructionFormatKind::OneU => {
-                let desc = self.add_desc(
+                let desc = self.add_desc((
                     OperandDescriptor::new()
                         .with_destination_mask(operands[0].swizzle.into())
                         .with_s1(operands[1].swizzle.into()),
-                );
+                    OPDESC_MASK_DST_SRC,
+                ));
                 shi::Operands::OneArgument {
                     dst: resolve_dst(),
                     src1: resolve_src(1),
@@ -284,4 +378,62 @@ fn build_symbol_table(ctx: &AsmContext) -> (HashMap<SymbolId, u32>, Vec<NullStri
         tbl.push(sym.into());
     }
     (sym_to_offset, tbl)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::asm::{
+        lower::OpdescMask,
+        shbin::instruction::{
+            Component, ComponentMask, ComponentSelector, OperandDescriptor, OperandSource,
+        },
+    };
+
+    #[test]
+    fn matches_mask_for_differing_swizzles() {
+        let full_comp = ComponentSelector::new()
+            .with_x(Component::X)
+            .with_y(Component::Y)
+            .with_z(Component::Z)
+            .with_w(Component::W);
+        let fst = OperandDescriptor::new()
+            .with_destination_mask(
+                ComponentMask::new()
+                    .with_x(false)
+                    .with_y(true)
+                    .with_z(true)
+                    .with_w(true),
+            )
+            .with_s1(OperandSource::new().with_selector(full_comp));
+
+        let snd = OperandDescriptor::new()
+            .with_destination_mask(
+                ComponentMask::new()
+                    .with_x(true)
+                    .with_y(true)
+                    .with_z(true)
+                    .with_w(true),
+            )
+            .with_s1(OperandSource::new().with_selector(full_comp))
+            .with_s2(OperandSource::new().with_selector(full_comp));
+        assert!(!fst.compatible_with(
+            snd,
+            OpdescMask {
+                component: true,
+                s1: true,
+                s2: true,
+                s3: false
+            }
+        ));
+
+        assert!(fst.compatible_with(
+            snd,
+            OpdescMask {
+                component: false,
+                s1: true,
+                s2: false,
+                s3: false
+            }
+        ));
+    }
 }
