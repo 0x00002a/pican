@@ -18,7 +18,7 @@ use super::{
     context::{AsmContext, BoundUniform, ConstantUniform, OutputInfo, ProcInfo},
     float24::Float24,
     instrs::InstructionPack,
-    ir::{self, Instruction, ProcId, RegHole, RegHoleKind, RegisterId, Vec4},
+    ir::{self, Instruction, ProcId, RegHole, RegHoleKind, RegOperand, RegisterId, Vec4},
 };
 
 #[derive(Debug)]
@@ -250,13 +250,14 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                 relative_addr.map(|a| a.into_inner()),
             )),
             crate::pir::ir::OperandKind::Register(r) => (self.lower_register(*r.get()), None),
+            crate::pir::ir::OperandKind::Cmp(c) => return ir::Operand::Cmp(c.into_inner()),
         };
         let swizzle = swizzle
             .map(|s| s.into_inner())
             .or(swiz)
             .map(|s| s.0.into_inner())
             .map(|s| s.iter().copied().collect());
-        ir::Operand { register, swizzle }
+        ir::Operand::Reg(RegOperand { register, swizzle })
     }
     fn lower_entry_point(&mut self, ent: &EntryPoint<'a>) -> Result<(), FatalErrorEmitted> {
         let id = self.procs.id_for(*ent.name.get());

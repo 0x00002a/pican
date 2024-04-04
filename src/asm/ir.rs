@@ -1,11 +1,12 @@
 use crate::{
     ir::SwizzleDim,
-    ops::OpCode,
+    ops::{CmpOp, OpCode},
     register::{Register, RegisterKind},
 };
 use copy_arrayvec::CopyArrayVec;
 
 use serde::{Deserialize, Serialize};
+use typesum::sumtype;
 
 /// Identifier for a free register which is awaiting allocation
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize)]
@@ -45,10 +46,18 @@ pub struct RegHole {
     pub id: RegisterId,
     pub kind: RegHoleKind,
 }
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize)]
-pub struct Operand {
+pub struct RegOperand {
     pub register: RegHole,
     pub swizzle: Option<CopyArrayVec<SwizzleDim, 4>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize)]
+#[sumtype]
+pub enum Operand {
+    Reg(RegOperand),
+    Cmp(CmpOp),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize, Deserialize)]

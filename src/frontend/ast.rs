@@ -1,3 +1,4 @@
+use crate::ops::CmpOp;
 use crate::properties::OutputProperty;
 use crate::register::Register;
 use serde::Serialize;
@@ -123,6 +124,7 @@ pub enum RegisterBindTarget<'a> {
 pub enum OperandKind<'a> {
     Var(IrNode<Ident<'a>>),
     Register(IrNode<Register>),
+    Cmp(IrNode<CmpOp>),
 }
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct Operand<'a> {

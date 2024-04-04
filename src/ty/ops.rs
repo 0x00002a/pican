@@ -14,6 +14,8 @@ pub enum OperandTy {
     SrcReg,
     /// Wide input, also allows uniforms with relative addressing
     WideSrc,
+    /// Comparison op type
+    Cmp,
 }
 
 impl OperandTy {
@@ -44,6 +46,9 @@ impl OperandTy {
                         })
                     )
                 }
+            }
+            OperandTy::Cmp => {
+                matches!(ty, Type::CmpOp)
             }
         }
     }
@@ -85,6 +90,21 @@ const DST_SRC: OperandSlots = OperandSlots::new(&[
     },
 ]);
 
+const CMP_SLOTS: OperandSlots = OperandSlots::new(&[
+    OperandSlot {
+        allowed_types: &[OperandTy::SrcReg],
+    },
+    OperandSlot {
+        allowed_types: &[OperandTy::Cmp],
+    },
+    OperandSlot {
+        allowed_types: &[OperandTy::Cmp],
+    },
+    OperandSlot {
+        allowed_types: &[OperandTy::SrcReg],
+    },
+]);
+
 const NO_OPERANDS: OperandSlots = OperandSlots::new(&[]);
 
 /// Get the shape of the operand slots for an opcode
@@ -110,7 +130,7 @@ pub fn slots_for_opcode(op: OpCode) -> OperandSlots {
         | OpCode::Rsq
         | OpCode::Mov => DST_SRC,
         OpCode::MovA => todo!(),
-        OpCode::Cmp => todo!(),
+        OpCode::Cmp => CMP_SLOTS,
         OpCode::Call => todo!(),
         OpCode::BreakC => todo!(),
         OpCode::CallC => todo!(),

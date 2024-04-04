@@ -104,6 +104,9 @@ struct LowerCtx {
 
 impl LowerCtx {
     fn add_desc(&mut self, (desc, mask): (OperandDescriptor, OpdescMask)) -> u8 {
+        // so as far as I can work out from picasso's code opdescs can be "compressed" by setting them to the max
+        // number of src's while keeping the destination mask the same (depending on opcode)
+
         for i in 0..self.descriptors.len() {
             let c_desc = self.descriptors[i];
             let min_mask = self.masks[i] & mask;
@@ -123,7 +126,17 @@ impl LowerCtx {
         operands: &[ir::Operand],
         ty: shi::InstructionFormatKind,
     ) -> shi::Operands {
+        let reg_operands = || {
+            operands
+                .iter()
+                .map(|o| match o {
+                    ir::Operand::Reg(r) => r,
+                    ir::Operand::Cmp(_) => unreachable!(),
+                })
+                .collect::<Vec<_>>()
+        };
         let two_arg_desc = || {
+            let operands = reg_operands();
             (
                 shi::OperandDescriptor::new()
                     .with_destination_mask(operands[0].swizzle.into())
@@ -133,6 +146,7 @@ impl LowerCtx {
             )
         };
         let mad_desc = || {
+            let operands = reg_operands();
             (
                 shi::OperandDescriptor::new()
                     .with_destination_mask(operands[0].swizzle.into())
@@ -143,7 +157,7 @@ impl LowerCtx {
             )
         };
         let resolve_reg = |idx: usize| {
-            match operands[idx].register.kind {
+            match operands[idx].as_reg().unwrap().register.kind {
                 ir::RegHoleKind::Fixed(f) => f,
                 ir::RegHoleKind::Free(_) => panic!("found free register at operand index {idx}, did the register allocation pass not run?"),
             }
@@ -190,6 +204,7 @@ impl LowerCtx {
                 }
             }
             shi::InstructionFormatKind::OneU => {
+                let operands = reg_operands();
                 let desc = self.add_desc((
                     OperandDescriptor::new()
                         .with_destination_mask(operands[0].swizzle.into())
@@ -205,11 +220,21 @@ impl LowerCtx {
             }
             shi::InstructionFormatKind::OneC => shi::Operands::Cmp {
                 src1: resolve_src(0),
-                src2: resolve_src(1),
-                desc: self.add_desc(two_arg_desc()),
+                src2: resolve_src(3),
+                desc: self.add_desc((
+                    OperandDescriptor::new()
+                        .with_s1(operands[0].as_reg().unwrap().swizzle.into())
+                        .with_s2(operands[3].as_reg().unwrap().swizzle.into()),
+                    OpdescMask {
+                        component: false,
+                        s1: true,
+                        s2: true,
+                        s3: false,
+                    },
+                )),
                 adx1: 0,
-                cmpy: todo!(),
-                cmpx: todo!(),
+                cmpx: operands[1].into_cmp().unwrap(),
+                cmpy: operands[2].into_cmp().unwrap(),
             },
             shi::InstructionFormatKind::Two => todo!(),
             shi::InstructionFormatKind::Three => todo!(),

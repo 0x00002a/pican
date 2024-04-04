@@ -3,7 +3,7 @@ use serde::Serialize;
 
 use crate::{
     ir::{Float, Ident, IrNode, SwizzleDims},
-    ops::OpCode,
+    ops::{CmpOp, OpCode},
     properties::OutputProperty,
     register::Register,
 };
@@ -60,6 +60,7 @@ pub struct Operand<'a> {
 pub enum OperandKind<'a> {
     Var(IrNode<Ident<'a>>),
     Register(IrNode<Register>),
+    Cmp(IrNode<CmpOp>),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]

@@ -27,6 +27,8 @@ pub enum Type {
     UniformArray(UniformArrayTy),
     Register(RegisterTy),
     VecUniform(VecUniformTy),
+    #[sumtype(ignore)]
+    CmpOp,
 }
 impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -34,6 +36,7 @@ impl std::fmt::Display for Type {
             Type::UniformArray(u) => u.fmt(f),
             Type::Register(r) => r.fmt(f),
             Type::VecUniform(u) => u.fmt(f),
+            Type::CmpOp => f.write_str("cmp"),
         }
     }
 }
@@ -120,6 +123,7 @@ impl<'a> ContextuallyTyped<'a> for Operand<'a> {
         match self.kind.get() {
             crate::pir::ir::OperandKind::Var(v) => ctx.type_of(v),
             crate::pir::ir::OperandKind::Register(r) => ctx.type_of(&r.get().kind),
+            crate::pir::ir::OperandKind::Cmp(_) => Ok(Type::CmpOp),
         }
     }
 }

@@ -1,0 +1,6 @@
+.proc main
+
+    cmp r0.xw, le, ge, r1.zy
+
+
+.end

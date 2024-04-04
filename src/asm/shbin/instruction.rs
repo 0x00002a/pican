@@ -2,7 +2,7 @@ use std::io::{Seek, Write};
 
 use crate::{
     ir::SwizzleDim,
-    ops::OpCode,
+    ops::{CmpOp, OpCode},
     register::{Register, RegisterKind},
 };
 use binrw::{binrw, BinRead, BinReaderExt, BinWrite, BinWriterExt};
@@ -401,7 +401,27 @@ impl Instruction {
                     pattern.s3().selector(),
                 )
             }
-            Operands::Cmp { .. } => todo!(),
+            Operands::Cmp {
+                src1,
+                src2,
+                cmpx,
+                cmpy,
+                desc,
+                ..
+            } => {
+                let pattern = lookup_pat(desc);
+                format!(
+                    "{}{}{}, {}, {}, {}{}{}",
+                    if pattern.s1().negate() { "-" } else { "" },
+                    src1,
+                    pattern.s1().selector(),
+                    cmpx,
+                    cmpy,
+                    if pattern.s2().negate() { "-" } else { "" },
+                    src2,
+                    pattern.s2().selector(),
+                )
+            }
             Operands::SetEmit { .. } => todo!(),
             Operands::ControlFlow { .. } => todo!(),
             Operands::Zero => "".to_owned(),
@@ -580,8 +600,8 @@ pub enum Operands {
         desc: u8,
         /// address register index for src1
         adx1: u8,
-        cmpy: u8,
-        cmpx: u8,
+        cmpy: CmpOp,
+        cmpx: CmpOp,
     },
     SetEmit {
         vtxid: u8,
@@ -658,6 +678,12 @@ macro_rules! instruct_rec {
     ($v:ident, src3: $s:ident) => {
         $v.set_src3(src_idx($s))
     };
+    ($v:ident, cmpx: $s:ident) => {
+        $v.set_cmpx($s as u8)
+    };
+    ($v:ident, cmpy: $s:ident) => {
+        $v.set_cmpy($s as u8)
+    };
     ($v:ident, $t:ident: $d:ident) => {
         paste::paste! { $v.[<set_ $t>]($d) }
     };
@@ -678,6 +704,14 @@ macro_rules! map_vtn {
     };
     ($vr:expr, desc) => {
         $vr.into()
+    };
+
+    ($vr:expr, cmpx) => {
+        CmpOp::from_u8($vr)
+    };
+
+    ($vr:expr, cmpy) => {
+        CmpOp::from_u8($vr)
     };
     ($vr:expr, $o:ident) => {
         $vr
@@ -726,6 +760,7 @@ macro_rules! instructs {
                 match self {
                     $to::Five(o) => o.set_opc(op >> 3),
                     $to::FiveI(o) => o.set_opc(op >> 3),
+                    $to::OneC(o) => o.set_opc(op >> 1),
                     $( $to::$arm (o) => {
                         o.set_opc(op)
                     },)*

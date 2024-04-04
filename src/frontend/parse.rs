@@ -12,6 +12,7 @@ use crate::alloc::Bump;
 use crate::context::PicanOptions;
 use crate::ir::{Float, HasSpan, SwizzleDim, SwizzleDims};
 use crate::ir::{IrNode, Span};
+use crate::ops::CmpOp;
 use crate::properties::OutputProperty;
 use crate::register::{Register, RegisterKind};
 use crate::span::FileId;
@@ -455,6 +456,19 @@ fn output_property<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OutputProperty
     ])
     .parse(i)
 }
+
+fn cmp_op<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, CmpOp> {
+    penum(&[
+        ("eq", CmpOp::Eq),
+        ("lt", CmpOp::Lt),
+        ("gt", CmpOp::Gt),
+        ("ge", CmpOp::Ge),
+        ("le", CmpOp::Le),
+        ("ne", CmpOp::Ne),
+    ])
+    .parse(i)
+}
+
 fn directive<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Directive<'a>> {
     let (i, _) = tag(".")(i)?;
     let (i, d) = tag("nodvle")
@@ -580,6 +594,7 @@ fn swizzle_dim<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, SwizzleDim> {
 
 fn operand_kind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OperandKind<'a>> {
     branch::alt((
+        nfo(cmp_op.ctx("cmp operand")).map(OperandKind::Cmp),
         nfo(register.ctx("register operand")).map(OperandKind::Register),
         nfo(ident.ctx("identifier operand")).map(OperandKind::Var),
     ))

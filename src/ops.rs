@@ -205,3 +205,37 @@ pub enum OperandWidth {
     Wide,
     Narrow,
 }
+
+#[derive(
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Clone,
+    Copy,
+    Debug,
+    EnumIter,
+    EnumString,
+    Display,
+    Serialize,
+    Deserialize,
+)]
+#[repr(u8)]
+#[strum(serialize_all = "snake_case")]
+pub enum CmpOp {
+    Eq = 0,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Unknown1,
+    Unknown2,
+}
+
+impl CmpOp {
+    pub fn from_u8(i: u8) -> CmpOp {
+        Self::iter().nth(i as usize).unwrap()
+    }
+}

@@ -309,6 +309,7 @@ mod lowering {
             let r = match self {
                 OperandKind::Var(v) => pir::OperandKind::Var(ctx.lower(v)?),
                 OperandKind::Register(r) => pir::OperandKind::Register(r),
+                OperandKind::Cmp(op) => pir::OperandKind::Cmp(op),
             };
             Ok(r)
         }
