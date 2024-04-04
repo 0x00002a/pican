@@ -13,6 +13,7 @@ binrw = "0.13.3"
 bumpalo = { version = "3.15.4", features = ["collections"] }
 codespan = { version = "0.11.1", features = ["serialization"] }
 codespan-reporting = "0.11.1"
+copy_arrayvec = { version = "0.1.0", features = ["serde"] }
 indexmap = { version = "2.2.6", features = ["serde"] }
 modular-bitfield = "0.11.2"
 nom = "7.1.3"

@@ -210,6 +210,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "copy_arrayvec"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2420a9bf4d289678e6a2ed56819efb87c6d84c274ae9540d417a19e2cc7272f4"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "diff"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -399,6 +408,7 @@ dependencies = [
  "bumpalo",
  "codespan",
  "codespan-reporting",
+ "copy_arrayvec",
  "indexmap",
  "modular-bitfield",
  "nom",
