@@ -36,10 +36,10 @@ mod lowering {
     use crate::{
         alloc::{Bump, BumpVec},
         context::PicanContext,
-        copy_arrayvec::CopyArrayVec,
         diagnostics::{DiagnosticBuilder, FatalErrorEmitted},
         ir::{Ident, IrNode, SwizzleDim, SwizzleDims},
     };
+    use copy_arrayvec::CopyArrayVec;
 
     use crate::frontend::ast::{
         Constant, FunctionDecl, InputBind, Op, Operand, OperandKind, Operands, OutputBind,

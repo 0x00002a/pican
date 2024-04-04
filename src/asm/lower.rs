@@ -13,10 +13,10 @@ use super::{
 
 use crate::{
     asm::context::ConstantUniform,
-    copy_arrayvec::CopyArrayVec,
     register::{RegisterKind, RegisterType},
 };
 use binrw::NullString;
+use copy_arrayvec::CopyArrayVec;
 use shbin::instruction as shi;
 
 pub fn lower_to_shbin(ctx: &AsmContext, instrs: &InstructionPack) -> shbin::Shbin {
@@ -117,17 +117,7 @@ impl LowerCtx {
         self.descriptors.push(desc);
         self.masks.push(mask);
         offset
-
-        /*
-        if let Some(offset) = self.descriptors.iter().position(|d| d == &desc) {
-            offset as u8
-        } else {
-            let offset = self.descriptors.len() as u8;
-            self.descriptors.push(desc);
-            offset
-        }*/
     }
-    //fn conv_operand(&mut self, dst: Option<ir::Operand>, src1: Option<ir::Operand>, src2: Option<ir::Operand>, src3: Option<ir::Operand>, )
     fn convert_operands(
         &mut self,
         operands: &[ir::Operand],

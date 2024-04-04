@@ -760,12 +760,13 @@ instructs! {
 mod tests {
     use std::io::Cursor;
 
-    use crate::{copy_arrayvec::CopyArrayVec, ir::SwizzleDim, ops::OpCode};
+    use crate::{ir::SwizzleDim, ops::OpCode};
     use binrw::{BinRead, BinWriterExt};
+    use copy_arrayvec::CopyArrayVec;
 
     use crate::asm::shbin::instruction::{Component, ComponentSelector};
 
-    use super::{ComponentMask, Instruction, OperandDescriptor, OperandSource, Operands};
+    use super::{Instruction, Operands};
 
     #[test]
     fn instr_roundtrip() {

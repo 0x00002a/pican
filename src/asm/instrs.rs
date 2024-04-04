@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::copy_arrayvec::CopyArrayVec;
+use copy_arrayvec::CopyArrayVec;
 use serde::{Deserialize, Serialize};
 
 use super::{ir::Instruction, MAX_SHBIN_INSTRUCTIONS};

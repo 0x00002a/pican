@@ -1,7 +1,7 @@
+use copy_arrayvec::CopyArrayVec;
 use serde::Serialize;
 
 use crate::{
-    copy_arrayvec::CopyArrayVec,
     ir::{Float, Ident, IrNode, SwizzleDims},
     ops::OpCode,
     properties::OutputProperty,
