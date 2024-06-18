@@ -1,0 +1,6 @@
+.constf neg_ones(-1.0, -1.0, -1.0, -1.0)
+
+.proc main
+    add r10.y, neg_ones.x, r10.y
+
+.end

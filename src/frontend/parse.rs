@@ -594,7 +594,7 @@ fn swizzle_dim<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, SwizzleDim> {
 
 fn operand_kind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OperandKind<'a>> {
     branch::alt((
-        nfo(cmp_op.ctx("cmp operand")).map(OperandKind::Cmp),
+        nfo(cmp_op.ctx("cmp operand").then_ignore(ncm::peek(tkn(",")))).map(OperandKind::Cmp),
         nfo(register.ctx("register operand")).map(OperandKind::Register),
         nfo(ident.ctx("identifier operand")).map(OperandKind::Var),
     ))
