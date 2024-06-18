@@ -50,6 +50,7 @@ pub struct RegHole {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize)]
 pub struct RegOperand {
     pub register: RegHole,
+    pub negate: bool,
     pub swizzle: Option<CopyArrayVec<SwizzleDim, 4>>,
 }
 

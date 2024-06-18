@@ -239,6 +239,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
     fn lower_operand(
         &mut self,
         Operand {
+            negate,
             kind,
             relative_addr,
             swizzle,
@@ -257,7 +258,11 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
             .or(swiz)
             .map(|s| s.0.into_inner())
             .map(|s| s.iter().copied().collect());
-        ir::Operand::Reg(RegOperand { register, swizzle })
+        ir::Operand::Reg(RegOperand {
+            register,
+            swizzle,
+            negate: *negate,
+        })
     }
     fn lower_entry_point(&mut self, ent: &EntryPoint<'a>) -> Result<(), FatalErrorEmitted> {
         let id = self.procs.id_for(*ent.name.get());

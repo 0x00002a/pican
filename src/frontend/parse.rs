@@ -603,12 +603,14 @@ fn operand_kind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OperandKind<'a>> 
 }
 
 fn operand<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operand<'a>> {
+    let (i, negate) = ncm::opt(nmc::char('-')).map(|c| c.is_some()).parse(i)?;
     let (i, kind) = nfo(operand_kind)(i)?;
     let (i, relative_address) = ncm::opt(array_index.ctx("operand relative address"))(i)?;
     let (i, swizzle) = ncm::opt(nfo(swizzle_dims.ctx("operand swizzle")))(i)?;
     Ok((
         i,
         Operand {
+            negate,
             kind,
             relative_address,
             swizzle,
@@ -757,6 +759,16 @@ mod tests {
             operands[0].get().kind.get().try_as_var().unwrap().get(),
             "mlk"
         );
+    }
+
+    #[test]
+    fn parse_mov_op_neg() {
+        let ctx = TestCtx::new();
+        let mov = ctx.run_parser("mov mlk, -r2", super::op).unwrap();
+        assert_eq!(mov.opcode.get(), &OpCode::Mov);
+        let operands = mov.operands.get().0;
+        assert_eq!(operands.len(), 2);
+        assert!(operands[1].get().negate);
     }
     #[test]
     fn parse_ident_with_num() {

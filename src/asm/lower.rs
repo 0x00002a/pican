@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::{
     context::{AsmContext, SymbolId},
     instrs::InstructionPack,
-    ir::{self, RegisterId, SwizzleDims},
+    ir::{self, RegHole, RegOperand, RegisterId, SwizzleDims},
     shbin::{
         self,
         instruction::{OpCodeInstructionFormat, OperandDescriptor},
@@ -140,8 +140,8 @@ impl LowerCtx {
             (
                 shi::OperandDescriptor::new()
                     .with_destination_mask(operands[0].swizzle.into())
-                    .with_s1(operands[1].swizzle.into())
-                    .with_s2(operands[2].swizzle.into()),
+                    .with_s1(operands[1].into())
+                    .with_s2(operands[2].into()),
                 OPDESC_MASK_DST_SRC_SRC,
             )
         };
@@ -150,9 +150,9 @@ impl LowerCtx {
             (
                 shi::OperandDescriptor::new()
                     .with_destination_mask(operands[0].swizzle.into())
-                    .with_s1(operands[1].swizzle.into())
-                    .with_s2(operands[2].swizzle.into())
-                    .with_s3(operands[3].swizzle.into()),
+                    .with_s1(operands[1].into())
+                    .with_s2(operands[2].into())
+                    .with_s3(operands[3].into()),
                 OPDESC_MASK_DST_SRC_SRC_SRC,
             )
         };
@@ -208,7 +208,7 @@ impl LowerCtx {
                 let desc = self.add_desc((
                     OperandDescriptor::new()
                         .with_destination_mask(operands[0].swizzle.into())
-                        .with_s1(operands[1].swizzle.into()),
+                        .with_s1(operands[1].into()),
                     OPDESC_MASK_DST_SRC,
                 ));
                 shi::Operands::OneArgument {
@@ -223,8 +223,8 @@ impl LowerCtx {
                 src2: resolve_src(3),
                 desc: self.add_desc((
                     OperandDescriptor::new()
-                        .with_s1(operands[0].as_reg().unwrap().swizzle.into())
-                        .with_s2(operands[3].as_reg().unwrap().swizzle.into()),
+                        .with_s1(operands[0].as_reg().unwrap().into())
+                        .with_s2(operands[3].as_reg().unwrap().into()),
                     OpdescMask {
                         component: false,
                         s1: true,
@@ -379,6 +379,12 @@ impl From<Option<SwizzleDims>> for shi::ComponentMask {
 impl From<Option<SwizzleDims>> for shi::OperandSource {
     fn from(value: Option<SwizzleDims>) -> Self {
         value.map(Into::into).unwrap_or_default()
+    }
+}
+
+impl From<&RegOperand> for shi::OperandSource {
+    fn from(value: &RegOperand) -> Self {
+        shi::OperandSource::from(value.swizzle).with_negate(value.negate)
     }
 }
 

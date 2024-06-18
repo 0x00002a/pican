@@ -129,6 +129,7 @@ pub enum OperandKind<'a> {
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct Operand<'a> {
     pub kind: IrNode<OperandKind<'a>>,
+    pub negate: bool,
     pub relative_address: Option<IrNode<u32>>,
     pub swizzle: Option<IrNode<SwizzleDims<'a>>>,
 }

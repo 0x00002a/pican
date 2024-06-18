@@ -370,6 +370,7 @@ mod lowering {
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             Ok(pir::Operand {
                 kind: self.kind.lower(ctx)?,
+                negate: self.negate,
                 relative_addr: self.relative_address,
                 swizzle: self.swizzle.map(|s| s.lower(ctx)).transpose()?,
             })

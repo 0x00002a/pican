@@ -1,0 +1,4 @@
+.proc main
+    mov r14, -r13
+
+.end
