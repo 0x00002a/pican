@@ -1,9 +1,9 @@
-use crate::ops::CmpOp;
+use crate::ops::{CmpOp, CondOp};
 use crate::properties::OutputProperty;
 use crate::register::Register;
 use serde::Serialize;
 
-use crate::ir::{Float, IrNode, SwizzleDims};
+use crate::ir::{Float, HasSpan, IrNode, SwizzleDims};
 
 pub use crate::ir::Ident;
 pub use crate::ops::OpCode;
@@ -19,6 +19,14 @@ macro_rules! sum_node {
         $vi enum $name <'a> {
             $($variant ( IrNode<$inner <'a>> )),*
         }
+
+        impl HasSpan for $name <'_> {
+            fn span(&self) -> crate::ir::Span {
+                match self {
+                    $(Self::$variant(v) => v.span()),*
+                }
+            }
+        }
     };
 }
 sum_node! {
@@ -31,6 +39,7 @@ pub enum Statement {
     Constant(ConstantDecl),
     OutputBind(OutputBind),
     Directive(Directive),
+    If(IfStmt),
     InputBind(InputBind)
 }
 }
@@ -126,6 +135,14 @@ pub enum OperandKind<'a> {
     Register(IrNode<Register>),
     Cmp(IrNode<CmpOp>),
 }
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+pub struct IfStmt<'a> {
+    pub cond: IrNode<CondOp>,
+    pub then: IrNode<&'a [Statement<'a>]>,
+    pub else_: Option<IrNode<&'a [Statement<'a>]>>,
+}
+
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct Operand<'a> {
     pub kind: IrNode<OperandKind<'a>>,

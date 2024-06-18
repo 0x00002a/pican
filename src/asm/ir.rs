@@ -1,6 +1,6 @@
 use crate::{
     ir::SwizzleDim,
-    ops::{CmpOp, OpCode},
+    ops::{CmpOp, CondOp, OpCode},
     register::{Register, RegisterKind},
 };
 use copy_arrayvec::CopyArrayVec;
@@ -59,6 +59,8 @@ pub struct RegOperand {
 pub enum Operand {
     Reg(RegOperand),
     Cmp(CmpOp),
+    Cond(CondOp),
+    Word(u32),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize, Deserialize)]

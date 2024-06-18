@@ -239,3 +239,13 @@ impl CmpOp {
         Self::iter().nth(i as usize).unwrap()
     }
 }
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum CondOp {
+    Or,
+    And,
+    X,
+    Y,
+}

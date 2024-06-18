@@ -37,7 +37,8 @@ mod lowering {
         alloc::{Bump, BumpVec},
         context::PicanContext,
         diagnostics::{DiagnosticBuilder, FatalErrorEmitted},
-        ir::{Ident, IrNode, SwizzleDim, SwizzleDims},
+        frontend::ast::{IfStmt, OpCode},
+        ir::{HasSpan, Ident, IrNode, SwizzleDim, SwizzleDims},
     };
     use copy_arrayvec::CopyArrayVec;
 
@@ -186,6 +187,12 @@ mod lowering {
                     }
                     super::ast::Directive::Gsh => todo!("handle geometry shaders"),
                 },
+                Statement::If(o) => self.ctx.diag.fatal(
+                    DiagnosticBuilder::error()
+                        .at(&o)
+                        .primary("cannot have if's outside of proc's")
+                        .build(),
+                ),
             }
         }
         fn lower<L: Lower>(&self, t: L) -> Result<L::Pir<'a>, FatalErrorEmitted> {
@@ -346,7 +353,7 @@ mod lowering {
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
             let opcode = self.opcode;
             let operands = ctx.lower(self.operands)?;
-            Ok(pir::Op { opcode, operands })
+            Ok(pir::Op::Regular { opcode, operands })
         }
     }
     impl<'b> Lower for SwizzleDims<'b> {
@@ -419,34 +426,67 @@ mod lowering {
             self,
             ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
+            fn lower_stmt<'a, S: AsRef<str>>(
+                ctx: &PirLower<'a, '_, S>,
+                st: &Statement<'_>,
+                out: &mut Vec<IrNode<pir::Op<'a>>>,
+            ) -> Result<(), FatalErrorEmitted> {
+                match st {
+                    Statement::Op(op) => {
+                        out.push(ctx.lower(*op)?);
+                        Ok(())
+                    }
+
+                    Statement::If(f) => {
+                        let span = f.span();
+                        let IfStmt { cond, then, else_ } = f.into_inner();
+                        let orig_sz = out.len();
+                        for st in then.get().iter() {
+                            lower_stmt(ctx, st, out)?;
+                        }
+                        let dest_offset = then.as_ref().map(|_| out.len() - orig_sz);
+                        let then_sz = out.len();
+                        if let Some(else_) = else_ {
+                            for st in else_.get().iter() {
+                                lower_stmt(ctx, st, out)?;
+                            }
+                        }
+                        let num_instrs = else_
+                            .as_ref()
+                            .unwrap_or(&then)
+                            .as_ref()
+                            .map(|_| out.len() - then_sz);
+                        out.push(IrNode::new(
+                            pir::Op::Cond(pir::CondExpr {
+                                cond,
+                                num_instrs,
+                                dest_offset,
+                            }),
+                            span,
+                        ));
+
+                        Ok(())
+                    }
+                    v => ctx.ctx.diag.fatal(
+                        DiagnosticBuilder::error()
+                            .at(v)
+                            .primary("proc's are only allowed to constain operations")
+                            .build(),
+                    ),
+                }
+            }
+
             let name = ctx.lower(self.name)?;
             let mut failed = None;
             let ops = self
                 .block
                 .map(|b| {
                     b.statements.map(|stmts| {
-                        let mut ops = BumpVec::new_in(ctx.alloc);
+                        let mut ops = Vec::new();
                         for stmt in stmts.iter().filter(|st| !st.get().is_comment()) {
-                            let lowered = stmt
-                                .map(|st| {
-                                    let Statement::Op(op) = st else {
-                                        return ctx.ctx.diag.fatal(
-                                    DiagnosticBuilder::error()
-                                        .at(stmt)
-                                        .primary("proc's are only allowed to constain operations")
-                                        .build(),
-                                );
-                                    };
-                                    ctx.lower(op)
-                                })
-                                .transpose();
-                            match lowered {
-                                Ok(op) => {
-                                    ops.push(op.concat());
-                                }
-                                Err(e) => {
-                                    failed.replace(e);
-                                }
+                            if let Err(e) = lower_stmt(ctx, stmt.get(), &mut ops) {
+                                failed.replace(e);
+                                break;
                             }
                         }
                         ops
@@ -456,7 +496,7 @@ mod lowering {
             if let Some(f) = failed {
                 return Err(f);
             }
-            let ops = ops.map(|v| v.into_bump_slice());
+            let ops = ops.map(|v| &*ctx.alloc.alloc_slice_copy(&v));
             Ok(pir::EntryPoint { name, ops })
         }
     }

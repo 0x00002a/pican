@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use crate::{
     context::PicanContext,
     diagnostics::{DiagnosticBuilder, Diagnostics, FatalErrorEmitted},
+    frontend::ast::OpCode,
     ir::{Float, HasSpan, Ident, IrNode, SwizzleDims},
+    pir::ir::CondExpr,
     register::{Register, RegisterKind},
 };
 use crate::{
@@ -270,16 +272,40 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
         let start = self.asm.next_offset();
 
         for op in ent.ops.get().iter().map(|p| p.get()) {
-            let operands = op
-                .operands
-                .get()
-                .iter()
-                .map(|operand| self.lower_operand(operand.get()))
-                .collect();
-            self.asm.push(Instruction {
-                opcode: op.opcode.into_inner(),
-                operands,
-            });
+            match op {
+                crate::pir::ir::Op::Regular { opcode, operands } => {
+                    let operands = operands
+                        .get()
+                        .iter()
+                        .map(|operand| self.lower_operand(operand.get()))
+                        .collect();
+                    self.asm.push(Instruction {
+                        opcode: opcode.into_inner(),
+                        operands,
+                    });
+                }
+                crate::pir::ir::Op::Cond(CondExpr {
+                    cond,
+                    num_instrs,
+                    dest_offset,
+                }) => {
+                    self.asm.push(Instruction {
+                        opcode: OpCode::IfC,
+                        operands: [
+                            ir::Operand::Word(
+                                num_instrs
+                                    .into_inner()
+                                    .try_into()
+                                    .expect("too many instructions"),
+                            ),
+                            ir::Operand::Word(dest_offset.into_inner().try_into().unwrap()),
+                            ir::Operand::Cond(cond.into_inner()),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    });
+                }
+            }
         }
         let end = self.asm.next_offset();
         self.asm_ctx.define_proc(

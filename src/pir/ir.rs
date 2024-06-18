@@ -3,7 +3,7 @@ use serde::Serialize;
 
 use crate::{
     ir::{Float, Ident, IrNode, SwizzleDims},
-    ops::{CmpOp, OpCode},
+    ops::{CmpOp, CondOp, OpCode},
     properties::OutputProperty,
     register::Register,
 };
@@ -43,9 +43,12 @@ pub struct EntryPoint<'a> {
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Op<'a> {
-    pub opcode: IrNode<OpCode>,
-    pub operands: IrNode<CopyArrayVec<IrNode<Operand<'a>>, 4>>,
+pub enum Op<'a> {
+    Regular {
+        opcode: IrNode<OpCode>,
+        operands: IrNode<CopyArrayVec<IrNode<Operand<'a>>, 4>>,
+    },
+    Cond(CondExpr),
 }
 #[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Operand<'a> {
@@ -62,6 +65,12 @@ pub enum OperandKind<'a> {
     Var(IrNode<Ident<'a>>),
     Register(IrNode<Register>),
     Cmp(IrNode<CmpOp>),
+}
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
+pub struct CondExpr {
+    pub cond: IrNode<CondOp>,
+    pub num_instrs: IrNode<usize>,
+    pub dest_offset: IrNode<usize>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]

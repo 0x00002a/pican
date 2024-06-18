@@ -1,9 +1,9 @@
-use super::ast::Stmt;
 use super::ast::{
     self, Block, Constant, ConstantDecl, ConstantDiscriminants, Directive, FunctionDecl, Ident,
     InputBind, Op, OpCode, Operand, OperandKind, Operands, OutputBind, RegisterBind, Statement,
     SwizzleExpr, Uniform, UniformDecl, UniformTy,
 };
+use super::ast::{IfStmt, Stmt};
 use super::parse_ext::ParserExt;
 
 use nom::character::complete::{self as nmc};
@@ -12,7 +12,7 @@ use crate::alloc::Bump;
 use crate::context::PicanOptions;
 use crate::ir::{Float, HasSpan, SwizzleDim, SwizzleDims};
 use crate::ir::{IrNode, Span};
-use crate::ops::CmpOp;
+use crate::ops::{CmpOp, CondOp};
 use crate::properties::OutputProperty;
 use crate::register::{Register, RegisterKind};
 use crate::span::FileId;
@@ -227,6 +227,7 @@ fn stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
                     .map(ast::Comment)
             })
             .map(Statement::Comment),
+        nfo(if_stmt).map(Into::into),
         nfo(op).map(Into::into),
         nfo(entry_point).map(Into::into),
     ))
@@ -600,6 +601,84 @@ fn operand_kind<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, OperandKind<'a>> 
     ))
     .ctx("operand")
     .parse(i)
+}
+fn cond_op<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, CondOp> {
+    fn flag<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, char> {
+        let (i, f) = tag("cmp.")
+            .ignore_then(nmc::char('x').or(nmc::char('y')))
+            .parse(i)?;
+        Ok((i, f))
+    }
+    let (i, f1) = flag(i)?;
+    let (i, op) = ncm::opt(
+        ncm::value(CondOp::Or, tkn("||"))
+            .or(ncm::value(CondOp::And, tkn("&&")))
+            .then_ignore(ncm::peek(flag)),
+    )(i)?;
+    if let Some(op) = op {
+        let (i, f2) = flag(i)?;
+        assert_ne!(
+            f1, f2,
+            "conditional expression with both sides the same, this doesn't make sense"
+        );
+        Ok((i, op))
+    } else {
+        Ok((
+            i,
+            match f1 {
+                'x' => CondOp::X,
+                'y' => CondOp::Y,
+                _ => unreachable!(),
+            },
+        ))
+    }
+}
+
+fn block_stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
+    nfo(if_stmt)
+        .map(Into::into)
+        .or(nfo(op).map(Into::into))
+        .parse(i)
+}
+
+fn if_stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, IfStmt<'a>> {
+    let (i, _) = ncm::verify(opcode, |c| matches!(c, OpCode::IfC))(i)?;
+    let (i, cond) = nfo(cond_op)(i)?;
+    #[derive(Clone, Copy)]
+    enum EndTag {
+        End,
+        Else,
+    }
+    let (i, inner) = nfo(many_till(
+        block_stmt,
+        ncm::value(EndTag::End, tag(".end")).or(ncm::value(EndTag::Else, tag(".else"))),
+    ))(i)?;
+    let ctx = &i.extra;
+    let span = inner.span();
+    let (then, ending) = inner.into_inner();
+    let then = IrNode::new(ctx.alloc_slice(&then), span);
+    match ending {
+        EndTag::End => Ok((
+            i,
+            IfStmt {
+                cond,
+                then,
+                else_: None,
+            },
+        )),
+        EndTag::Else => {
+            let (i, else_) = nfo(many_till(block_stmt, tag(".end")))(i)?;
+            let else_ = else_.map(|i| ctx.alloc_slice(&i.0));
+            Ok((
+                i,
+                IfStmt {
+                    cond,
+                    then,
+                    else_: Some(else_),
+                },
+            ))
+        }
+    }
 }
 
 fn operand<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Operand<'a>> {

@@ -131,7 +131,7 @@ impl LowerCtx {
                 .iter()
                 .map(|o| match o {
                     ir::Operand::Reg(r) => r,
-                    ir::Operand::Cmp(_) => unreachable!(),
+                    _ => unreachable!(),
                 })
                 .collect::<Vec<_>>()
         };
