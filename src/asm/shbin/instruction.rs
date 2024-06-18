@@ -423,7 +423,15 @@ impl Instruction {
                 )
             }
             Operands::SetEmit { .. } => todo!(),
-            Operands::ControlFlow { .. } => todo!(),
+            Operands::ControlFlow {
+                cond, refx, refy, ..
+            } => match cond {
+                0x0 => format!("cmp.x == {refx} || cmp.y == {refy}"),
+                0x1 => format!("cmp.x == {refx} && cmp.y == {refy}"),
+                0x2 => format!("cmp.x == {refx}"),
+                0x3 => format!("cmp.y == {refy}"),
+                _ => unreachable!(),
+            },
             Operands::Zero => "".to_owned(),
             Operands::Unknown => todo!(),
             Operands::ControlFlowConstant { .. } => todo!(),
