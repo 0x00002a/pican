@@ -38,7 +38,7 @@ mod lowering {
         context::PicanContext,
         diagnostics::{DiagnosticBuilder, FatalErrorEmitted},
         frontend::ast::{IfStmt, OpCode},
-        ir::{HasSpan, Ident, IrNode, SwizzleDim, SwizzleDims},
+        ir::{HasSpan, Ident, IrNode, Span, SwizzleDim, SwizzleDims},
     };
     use copy_arrayvec::CopyArrayVec;
 
@@ -441,6 +441,14 @@ mod lowering {
                         let span = f.span();
                         let IfStmt { cond, then, else_ } = f.into_inner();
                         let orig_sz = out.len();
+                        out.push(IrNode::new(
+                            pir::Op::Regular {
+                                opcode: IrNode::new(OpCode::Nop, cond.span()),
+                                operands: IrNode::new(CopyArrayVec::new(), cond.span()),
+                            },
+                            cond.span(),
+                        ));
+                        let reservation_idx = orig_sz;
                         for st in then.get().iter() {
                             lower_stmt(ctx, st, out)?;
                         }
@@ -456,14 +464,21 @@ mod lowering {
                             .unwrap_or(&then)
                             .as_ref()
                             .map(|_| out.len() - then_sz);
-                        out.push(IrNode::new(
-                            pir::Op::Cond(pir::CondExpr {
-                                cond,
-                                num_instrs,
-                                dest_offset,
-                            }),
-                            span,
-                        ));
+                        let reservation = std::mem::replace(
+                            &mut out[reservation_idx],
+                            IrNode::new(
+                                pir::Op::Cond(pir::CondExpr {
+                                    cond,
+                                    num_instrs,
+                                    dest_offset,
+                                }),
+                                span,
+                            ),
+                        );
+                        if ctx.ctx.opts.picasso_compat_bug_for_bug {
+                            // picasso puts a nop at the end of an ifc
+                            out.push(reservation);
+                        }
 
                         Ok(())
                     }
