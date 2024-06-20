@@ -238,8 +238,8 @@ impl LowerCtx {
             },
             shi::InstructionFormatKind::Two => shi::Operands::ControlFlow {
                 cond: operands[2].as_cond().unwrap().as_u8(),
-                refx: 0,
-                refy: 0,
+                refx: 1,
+                refy: 1,
                 dst_offset: operands[1]
                     .into_word()
                     .unwrap()
