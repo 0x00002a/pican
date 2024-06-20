@@ -236,7 +236,21 @@ impl LowerCtx {
                 cmpx: operands[1].into_cmp().unwrap(),
                 cmpy: operands[2].into_cmp().unwrap(),
             },
-            shi::InstructionFormatKind::Two => todo!(),
+            shi::InstructionFormatKind::Two => shi::Operands::ControlFlow {
+                cond: operands[2].as_cond().unwrap().as_u8(),
+                refx: 0,
+                refy: 0,
+                dst_offset: operands[1]
+                    .into_word()
+                    .unwrap()
+                    .try_into()
+                    .expect("dst offset too large to fit in binary"),
+                num: operands[0]
+                    .into_word()
+                    .unwrap()
+                    .try_into()
+                    .expect("num offset too large to fit in binary"),
+            },
             shi::InstructionFormatKind::Three => todo!(),
             shi::InstructionFormatKind::Four => todo!(),
             shi::InstructionFormatKind::Five => shi::Operands::Mad {

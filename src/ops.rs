@@ -249,3 +249,14 @@ pub enum CondOp {
     X,
     Y,
 }
+
+impl CondOp {
+    pub fn as_u8(self) -> u8 {
+        match self {
+            CondOp::Or => 0,
+            CondOp::And => 1,
+            CondOp::X => 2,
+            CondOp::Y => 3,
+        }
+    }
+}

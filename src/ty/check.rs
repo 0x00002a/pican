@@ -20,7 +20,7 @@ pub(crate) fn check_operation<'a>(
                 }
             }
         }
-        Op::Cond(_) => todo!(),
+        Op::Cond(_) => {}
     }
     Ok(())
 }
