@@ -482,10 +482,11 @@ mod lowering {
 
                         Ok(())
                     }
+                    Statement::Comment(_) => Ok(()),
                     v => ctx.ctx.diag.fatal(
                         DiagnosticBuilder::error()
                             .at(v)
-                            .primary("proc's are only allowed to constain operations")
+                            .primary("proc's are only allowed to contain operations")
                             .build(),
                     ),
                 }

@@ -1,0 +1,8 @@
+.proc main
+    ifc cmp.y
+        mov r1, r2
+    .else
+        ; this is a comment
+        mov r3, r4
+    .end
+.end
