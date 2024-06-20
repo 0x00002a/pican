@@ -399,18 +399,22 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                         crate::pir::ir::ConstantUniform::Float(i) => {
                             let i = i.get();
                             let conv_f = |i: IrNode<Float>| -> Result<Float24, FatalErrorEmitted> {
-                                i.into_inner().try_into().map_err(|e| {
+                                let val = i.into_inner().into_inner();
+                                let (mut fval, err) = Float24::from_f32_with_err(val);
+                                if let Some(e) = err {
+                                    fval = Float24::from_f32_saturating(val);
+
                                     self.diag
-                                        .fatal::<()>(
-                                            DiagnosticBuilder::error()
+                                        .add(
+                                            DiagnosticBuilder::warn()
                                                 .at(&i)
                                                 .primary(format!(
-                                                    "float doesn't fit in gpu format {e}"
+                                                    "float ({val}) doesn't fit in gpu format {e}, truncating it to {fval}", fval = fval.to_f32()
                                                 ))
                                                 .build(),
-                                        )
-                                        .unwrap_err()
-                                })
+                                        );
+                                }
+                                Ok(fval)
                             };
                             (
                                 RegisterKind::FloatingVecUniform,

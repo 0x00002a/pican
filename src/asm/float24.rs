@@ -1,5 +1,7 @@
 use crate::ir::Float;
 
+const F24_EXP_MAX: u32 = 127;
+
 /// 24-bit floating-point representation used by the PICA200
 ///
 /// This is a container for the floating point representation used
@@ -53,7 +55,8 @@ impl std::fmt::Display for FloatParts {
 }
 
 fn split_up_float(v: f32) -> FloatParts {
-    let vb = u32::from_le_bytes(v.to_le_bytes());
+    let vb = v.to_bits();
+
     // layout is <sign:1><exp:8><mant:23>
     let sign = vb >> 31;
     let exp = (vb << 1) >> 24;
@@ -62,10 +65,18 @@ fn split_up_float(v: f32) -> FloatParts {
 }
 
 impl Float24 {
-    /// Attempt to convert an f32
-    pub fn try_from_f32(v: f32) -> Result<Self, F32ToF24ConversionError> {
+    /// Create a Float24 from parts without any narrowing checks
+    fn from_parts_unchecked(FloatParts { sign, exp, mant }: FloatParts) -> Self {
+        let packed = (sign << 23) | ((exp & F24_EXP_MAX) << 16) | (mant & (0xFFFF - 1));
+        let pb = packed.to_le_bytes();
+
+        Self([pb[1], pb[2], pb[3]])
+    }
+
+    /// Convert from an f32 reporting any errors but not aborting
+    pub fn from_f32_with_err(v: f32) -> (Self, Option<F32ToF24ConversionError>) {
         if v == 0.0 {
-            return Ok(Self([0, 0, 0]));
+            return (Self([0, 0, 0]), None);
         }
         let FloatParts { sign, exp, mant } = split_up_float(v);
 
@@ -74,20 +85,59 @@ impl Float24 {
         // adjust the bias: https://en.wikipedia.org/wiki/Exponent_bias
         // since we only have 7 bits we convert first to the unbiased version
         // then back to the bias version for 7 bits
+        //
         let to_exp = (exp as i32) - 127 + 63;
-        if to_exp < 0 {
-            return Err(F32ToF24ConversionError::ExponentUnderflow);
-        } else if exp > 127 {
-            return Err(F32ToF24ConversionError::ExponentOverflow);
-        }
+        let err = if to_exp < 0 {
+            Some(F32ToF24ConversionError::ExponentUnderflow)
+        } else if to_exp > F24_EXP_MAX as i32 {
+            Some(F32ToF24ConversionError::ExponentOverflow)
+        } else {
+            None
+        };
         // have to strip the bottom 7 bits of this
         let to_mant = mant >> 7;
         assert!(to_mant <= (u16::MAX as u32));
 
-        let packed = (sign << 23) | ((to_exp as u32) << 16) | to_mant;
-        let pb = packed.to_le_bytes();
+        (
+            Self::from_parts_unchecked(FloatParts {
+                sign,
+                exp: to_exp as u32,
+                mant: to_mant,
+            }),
+            err,
+        )
+    }
 
-        Ok(Self([pb[1], pb[2], pb[3]]))
+    pub fn from_f32_saturating(v: f32) -> Self {
+        let FloatParts { sign, .. } = split_up_float(v);
+
+        let (v, err) = Self::from_f32_with_err(v);
+        match err {
+            Some(F32ToF24ConversionError::ExponentUnderflow) => {
+                Self::from_parts_unchecked(FloatParts {
+                    sign,
+                    exp: 0,
+                    mant: 0,
+                })
+            }
+            Some(F32ToF24ConversionError::ExponentOverflow) => {
+                Self::from_parts_unchecked(FloatParts {
+                    sign,
+                    exp: F24_EXP_MAX,
+                    mant: 0,
+                })
+            }
+            None => v,
+        }
+    }
+    /// Attempt to convert an f32
+    pub fn try_from_f32(v: f32) -> Result<Self, F32ToF24ConversionError> {
+        let (val, err) = Self::from_f32_with_err(v);
+        if let Some(e) = err {
+            Err(e)
+        } else {
+            Ok(val)
+        }
     }
     /// Convert to the bit representation
     ///
@@ -157,5 +207,13 @@ mod tests {
     #[test]
     fn f24_from_zero() {
         assert_matches!(Float24::try_from_f32(0.0), Ok(_));
+    }
+
+    #[test]
+    fn f24_from_2() {
+        assert_matches!(Float24::from_f32_with_err(2.0), (_, None));
+        assert_eq!(Float24::from_f32_with_err(2.0).0.to_f32(), -0.0);
+
+        assert_eq!(Float24::from_f32_saturating(2.0).to_f32(), -0.0);
     }
 }

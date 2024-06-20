@@ -34,6 +34,9 @@ fn run<S: AsRef<str>>(args: &Args, input_id: FileId, ctx: &mut PicanContext<S>) 
         let json = serde_json::to_string_pretty(&pir).unwrap();
         println!("{json}");
     }
+    let Ok(_) = pican::asm::from_pir::from_pir(&pir, ctx) else {
+        panic!("failed to lower PIR to ASM");
+    };
 
     Some(())
 }
