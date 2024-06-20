@@ -1,0 +1,9 @@
+
+.proc main
+
+    ifc cmp.x
+        mov r12, r15
+
+    .end
+
+.end

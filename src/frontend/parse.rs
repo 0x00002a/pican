@@ -635,24 +635,27 @@ fn cond_op<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, CondOp> {
 }
 
 fn block_stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Statement<'a>> {
-    nfo(if_stmt)
-        .map(Into::into)
-        .or(nfo(op).map(Into::into))
+    nmc::multispace0
+        .ignore_then(stmt)
+        .then_ignore(nmc::multispace0)
         .parse(i)
 }
 
 fn if_stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, IfStmt<'a>> {
     let (i, _) = ncm::verify(opcode, |c| matches!(c, OpCode::IfC))(i)?;
+    let (i, _) = space(i)?;
     let (i, cond) = nfo(cond_op)(i)?;
     #[derive(Clone, Copy)]
     enum EndTag {
         End,
         Else,
     }
+    let (i, _) = space(i)?;
     let (i, inner) = nfo(many_till(
         block_stmt,
         ncm::value(EndTag::End, tag(".end")).or(ncm::value(EndTag::Else, tag(".else"))),
-    ))(i)?;
+    )
+    .req("missing .else or .end to if statement"))(i)?;
     let ctx = &i.extra;
     let span = inner.span();
     let (then, ending) = inner.into_inner();
@@ -667,7 +670,8 @@ fn if_stmt<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, IfStmt<'a>> {
             },
         )),
         EndTag::Else => {
-            let (i, else_) = nfo(many_till(block_stmt, tag(".end")))(i)?;
+            let (i, else_) =
+                nfo(many_till(block_stmt, tag(".end")).req("missing .end for if statement"))(i)?;
             let else_ = else_.map(|i| ctx.alloc_slice(&i.0));
             Ok((
                 i,
@@ -790,6 +794,9 @@ pub fn parse<'a>(
 mod tests {
     use std::str::FromStr;
 
+    use crate::frontend::ast::IfStmt;
+    use crate::ops::CondOp;
+    use crate::pir::ir::CondExpr;
     use crate::span::Files;
     use crate::{
         alloc::Bump,
@@ -1023,6 +1030,36 @@ mod tests {
         let ctx = TestCtx::new();
         let r = ctx.run_parser("pos", super::output_property).unwrap();
         assert_eq!(r, OutputProperty::Position);
+    }
+
+    #[test]
+    fn parse_cmp() {
+        let ctx = TestCtx::new();
+        let r = ctx.run_parser("cmp.x", super::cond_op).unwrap();
+        assert_eq!(r, CondOp::X);
+
+        let r = ctx.run_parser("cmp.y", super::cond_op).unwrap();
+        assert_eq!(r, CondOp::Y);
+
+        let r = ctx.run_parser("cmp.x || cmp.y", super::cond_op).unwrap();
+        assert_eq!(r, CondOp::Or);
+    }
+
+    #[test]
+    fn parse_ifc() {
+        let ctx = TestCtx::new();
+        let r = ctx
+            .run_parser(
+                r#"ifc cmp.x
+        .end"#,
+                super::if_stmt,
+            )
+            .unwrap();
+        //let stmt = r.as_if().unwrap().get();
+        let stmt = r;
+        assert_eq!(stmt.cond.get(), &CondOp::X);
+        assert_eq!(stmt.then.get(), &[]);
+        assert_eq!(stmt.else_, None);
     }
 
     #[test]
