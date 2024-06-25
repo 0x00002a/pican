@@ -107,13 +107,19 @@ impl From<SwizzleDim> for Component {
     }
 }
 
-#[bitfield]
+#[bitfield(bits = 8)]
 #[derive(Debug, BitfieldSpecifier, PartialEq, Eq, Clone, Copy)]
 pub struct ComponentSelector {
     pub w: Component,
     pub z: Component,
     pub y: Component,
     pub x: Component,
+}
+
+impl ComponentSelector {
+    pub fn as_u8(self) -> u8 {
+        self.bytes[0]
+    }
 }
 impl std::fmt::Display for ComponentSelector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

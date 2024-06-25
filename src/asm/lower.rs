@@ -6,13 +6,13 @@ use super::{
     ir::{self, RegHole, RegOperand, RegisterId, SwizzleDims},
     shbin::{
         self,
-        instruction::{OpCodeInstructionFormat, OperandDescriptor},
+        instruction::{OpCodeInstructionFormat, OperandDescriptor, OperandSource},
         ConstantTableEntry, ExecutableSection, ExecutableSectionHeader, Shbin, UniformTableEntry,
     },
 };
 
 use crate::{
-    asm::context::ConstantUniform,
+    asm::{context::ConstantUniform, shbin::instruction::ComponentSelector},
     frontend::ast::OpCode,
     register::{RegisterKind, RegisterType},
 };
@@ -27,32 +27,90 @@ pub fn lower_to_shbin(ctx: &AsmContext, instrs: &InstructionPack) -> shbin::Shbi
 pub const MAX_SHBIN_DESCRIPTORS: usize = 128;
 
 #[derive(Clone, Copy)]
-struct OpdescMask {
-    component: bool,
-    s1: bool,
-    s2: bool,
-    s3: bool,
-}
+struct OpdescMask(u64);
 impl OpdescMask {
-    const fn as_u64(self) -> u64 {
-        let c = if self.component { 0xF } else { 0 };
-        let s1 = if self.s1 { 0x1FF } else { 0 };
-        let s2 = if self.s2 { 0x1FF } else { 0 };
-        let s3 = if self.s3 { 0x1FF } else { 0 };
+    const fn new(component: bool, s1: bool, s2: bool, s3: bool) -> Self {
+        let c = if component { 0xF } else { 0 };
+        let s1 = if s1 { 0x1FF } else { 0 };
+        let s2 = if s2 { 0x1FF } else { 0 };
+        let s3 = if s3 { 0x1FF } else { 0 };
         // this is the integer for of an operand descriptor
-        c | (s1 << 4) | (s2 << 13) | (s3 << 22)
+        Self(c | (s1 << 4) | (s2 << 13) | (s3 << 22))
+    }
+    const fn as_u64(self) -> u64 {
+        self.0
+    }
+    fn as_descriptor(self) -> OperandDescriptor {
+        OperandDescriptor::from_bytes(self.0.to_le_bytes())
+    }
+
+    fn optimise(self, opcode: OpCode, desc: OperandDescriptor) -> Self {
+        let mut unused = [ComponentSelector::new(); 3];
+        let mk_swizzle_comp_mask = |n: u8| -> u8 { 3 << (6 - n * 2) };
+        match opcode {
+            OpCode::Mul
+            | OpCode::Sge
+            | OpCode::Slt
+            | OpCode::Flr
+            | OpCode::Max
+            | OpCode::Min
+            | OpCode::Mov
+            | OpCode::Mad
+            | OpCode::Add => {
+                let comp = desc.destination_mask();
+                let mut swiz_mask = 0u8;
+                if !comp.w() {
+                    swiz_mask |= mk_swizzle_comp_mask(3);
+                }
+                if !comp.z() {
+                    swiz_mask |= mk_swizzle_comp_mask(2);
+                }
+                if !comp.y() {
+                    swiz_mask |= mk_swizzle_comp_mask(1);
+                }
+                if !comp.x() {
+                    swiz_mask |= mk_swizzle_comp_mask(0);
+                }
+                let swiz = ComponentSelector::from_bytes(swiz_mask.to_le_bytes());
+                unused[0] = swiz;
+                unused[1] = swiz;
+                unused[2] = swiz;
+            }
+            OpCode::Dp3 => {
+                let swiz = ComponentSelector::from_bytes(mk_swizzle_comp_mask(3).to_le_bytes());
+                unused[0] = swiz;
+                unused[1] = swiz;
+            }
+            OpCode::Dph => {
+                unused[0] = ComponentSelector::from_bytes(mk_swizzle_comp_mask(3).to_le_bytes());
+            }
+            OpCode::Ex2 | OpCode::Lg2 | OpCode::Rcp | OpCode::Rsq => {
+                unused[0] = ComponentSelector::from_bytes(
+                    (mk_swizzle_comp_mask(1) | mk_swizzle_comp_mask(2) | mk_swizzle_comp_mask(3))
+                        .to_le_bytes(),
+                );
+            }
+            OpCode::Cmp => {
+                unused[0] = ComponentSelector::from_bytes(
+                    (mk_swizzle_comp_mask(2) | mk_swizzle_comp_mask(3)).to_le_bytes(),
+                );
+            }
+            _ => {}
+        }
+        let mask = self.as_u64()
+            & !(OperandDescriptor::new()
+                .with_s1(OperandSource::new().with_selector(unused[0]))
+                .with_s2(OperandSource::new().with_selector(unused[1]))
+                .with_s3(OperandSource::new().with_selector(unused[2]))
+                .as_u64());
+        Self(mask)
     }
 }
 impl std::ops::BitAnd for OpdescMask {
     type Output = OpdescMask;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        Self {
-            component: self.component && rhs.component,
-            s1: self.s1 && rhs.s1,
-            s2: self.s2 && rhs.s2,
-            s3: self.s3 && rhs.s3,
-        }
+        Self(self.0 & rhs.0)
     }
 }
 
@@ -60,42 +118,15 @@ impl std::ops::BitOr for OpdescMask {
     type Output = OpdescMask;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        Self {
-            component: self.component || rhs.component,
-            s1: self.s1 || rhs.s1,
-            s2: self.s2 || rhs.s2,
-            s3: self.s3 || rhs.s3,
-        }
+        Self(self.0 | rhs.0)
     }
 }
 
-const OPDESC_MASK_DST_SRC: OpdescMask = OpdescMask {
-    component: true,
-    s1: true,
-    s2: false,
-    s3: false,
-};
+const OPDESC_MASK_DST_SRC: OpdescMask = OpdescMask::new(true, true, false, false);
 
-const OPDESC_MASK_RSQ: OpdescMask = OpdescMask {
-    component: true,
-    s1: false,
-    s2: false,
-    s3: false,
-};
+const OPDESC_MASK_DST_SRC_SRC: OpdescMask = OpdescMask::new(true, true, true, false);
 
-const OPDESC_MASK_DST_SRC_SRC: OpdescMask = OpdescMask {
-    component: true,
-    s1: true,
-    s2: true,
-    s3: false,
-};
-
-const OPDESC_MASK_DST_SRC_SRC_SRC: OpdescMask = OpdescMask {
-    component: true,
-    s1: true,
-    s2: true,
-    s3: true,
-};
+const OPDESC_MASK_DST_SRC_SRC_SRC: OpdescMask = OpdescMask::new(true, true, true, true);
 
 impl OperandDescriptor {
     fn update(self, other: OperandDescriptor, mask: OpdescMask) -> Self {
@@ -118,9 +149,10 @@ struct LowerCtx {
 }
 
 impl LowerCtx {
-    fn add_desc(&mut self, (desc, mask): (OperandDescriptor, OpdescMask)) -> u8 {
+    fn add_desc(&mut self, (desc, mask): (OperandDescriptor, OpdescMask), opcode: OpCode) -> u8 {
         // so as far as I can work out from picasso's code opdescs can be "compressed" by setting them to the max
         // number of src's while keeping the destination mask the same (depending on opcode)
+        let mask = mask.optimise(opcode, desc);
 
         for i in 0..self.descriptors.len() {
             let c_desc = self.descriptors[i];
@@ -198,7 +230,7 @@ impl LowerCtx {
         };
         match ty {
             shi::InstructionFormatKind::One => {
-                let desc = self.add_desc(two_arg_desc());
+                let desc = self.add_desc(two_arg_desc(), opcode);
                 shi::Operands::TwoArguments {
                     dst: resolve_dst(),
                     src1: resolve_src(1),
@@ -209,7 +241,7 @@ impl LowerCtx {
                 }
             }
             shi::InstructionFormatKind::OneI => {
-                let desc = self.add_desc(two_arg_desc());
+                let desc = self.add_desc(two_arg_desc(), opcode);
                 shi::Operands::TwoArguments {
                     dst: resolve_dst(),
                     src1: resolve_src(1),
@@ -225,13 +257,13 @@ impl LowerCtx {
                     let opdesc =
                         OperandDescriptor::new().with_destination_mask(operands[0].swizzle.into());
                     if matches!(opcode, OpCode::Rsq) {
-                        (opdesc, OPDESC_MASK_RSQ)
+                        (opdesc, OPDESC_MASK_DST_SRC)
                     } else {
                         let opdesc = opdesc.with_s1(operands[1].into());
                         (opdesc, OPDESC_MASK_DST_SRC)
                     }
                 };
-                let desc = self.add_desc((opdesc, mask));
+                let desc = self.add_desc((opdesc, mask), opcode);
                 shi::Operands::OneArgument {
                     dst: resolve_dst(),
                     src1: resolve_src(1),
@@ -242,17 +274,15 @@ impl LowerCtx {
             shi::InstructionFormatKind::OneC => shi::Operands::Cmp {
                 src1: resolve_src(0),
                 src2: resolve_src(3),
-                desc: self.add_desc((
-                    OperandDescriptor::new()
-                        .with_s1(operands[0].as_reg().unwrap().into())
-                        .with_s2(operands[3].as_reg().unwrap().into()),
-                    OpdescMask {
-                        component: false,
-                        s1: true,
-                        s2: true,
-                        s3: false,
-                    },
-                )),
+                desc: self.add_desc(
+                    (
+                        OperandDescriptor::new()
+                            .with_s1(operands[0].as_reg().unwrap().into())
+                            .with_s2(operands[3].as_reg().unwrap().into()),
+                        OpdescMask::new(false, true, true, false),
+                    ),
+                    opcode,
+                ),
                 adx1: 0,
                 cmpx: operands[1].into_cmp().unwrap(),
                 cmpy: operands[2].into_cmp().unwrap(),
@@ -280,7 +310,7 @@ impl LowerCtx {
                 src2: resolve_src(2),
                 src3: resolve_src(3),
                 adx: 0,
-                desc: self.add_desc(mad_desc()),
+                desc: self.add_desc(mad_desc(), opcode),
                 inverse: false,
             },
             shi::InstructionFormatKind::FiveI => shi::Operands::Mad {
@@ -289,7 +319,7 @@ impl LowerCtx {
                 src2: resolve_src(2),
                 src3: resolve_src(3),
                 adx: 0,
-                desc: self.add_desc(mad_desc()),
+                desc: self.add_desc(mad_desc(), opcode),
                 inverse: true,
             },
             shi::InstructionFormatKind::Zero => {
@@ -472,24 +502,8 @@ mod tests {
             )
             .with_s1(OperandSource::new().with_selector(full_comp))
             .with_s2(OperandSource::new().with_selector(full_comp));
-        assert!(!fst.compatible_with(
-            snd,
-            OpdescMask {
-                component: true,
-                s1: true,
-                s2: true,
-                s3: false
-            }
-        ));
+        assert!(!fst.compatible_with(snd, OpdescMask::new(true, true, true, false)));
 
-        assert!(fst.compatible_with(
-            snd,
-            OpdescMask {
-                component: false,
-                s1: true,
-                s2: false,
-                s3: false
-            }
-        ));
+        assert!(fst.compatible_with(snd, OpdescMask::new(false, true, false, false)));
     }
 }

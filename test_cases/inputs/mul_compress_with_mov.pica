@@ -1,0 +1,8 @@
+; this is for testing the opdesc compression of mov + this multiply operation, they should be merged
+.in inpos
+
+.proc main
+    mov r0.xyz, inpos
+    mul r14.xyz, r14.xyz, r6.x
+
+.end
