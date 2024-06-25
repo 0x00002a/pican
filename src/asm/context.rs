@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{ir::Ident, properties::OutputProperty, register::Register};
+use indexmap::IndexMap;
 use string_interner::StringInterner;
 
 use super::{
@@ -66,7 +67,7 @@ pub struct BoundUniform {
 #[derive(Debug, Default)]
 pub struct AsmContext {
     /// Register -> Constant lookup
-    pub constants: HashMap<RegisterId, ConstantUniform>,
+    pub constants: IndexMap<RegisterId, ConstantUniform>,
     pub allocated_registers: HashMap<RegisterId, Register>,
     pub outputs: Vec<OutputInfo>,
     pub uniforms: Vec<BoundUniform>,

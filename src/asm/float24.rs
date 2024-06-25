@@ -216,4 +216,12 @@ mod tests {
 
         assert_eq!(Float24::from_f32_saturating(2.0).to_f32(), -0.0);
     }
+
+    #[test]
+    fn f24_from_full_2s() {
+        for i in 0..5 {
+            let num = 1.0 / 2.0f32.powf(i as f32);
+            assert_eq!(num, Float24::try_from_f32(num).unwrap().to_f32());
+        }
+    }
 }
