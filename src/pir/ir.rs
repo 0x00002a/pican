@@ -51,6 +51,16 @@ pub enum Op<'a> {
     },
     Cond(CondExpr),
 }
+
+impl<'a> Op<'a> {
+    pub fn is_nop(self) -> bool {
+        if let Self::Regular { opcode, .. } = self {
+            matches!(opcode.get(), OpCode::Nop)
+        } else {
+            false
+        }
+    }
+}
 #[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Operand<'a> {
     pub kind: IrNode<OperandKind<'a>>,

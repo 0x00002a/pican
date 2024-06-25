@@ -1,0 +1,9 @@
+.proc main
+
+    ifc cmp.x
+        ifc cmp.y
+            mul r5, r2, r3
+        .end
+    .end
+    mul r10, r2, r1
+.end

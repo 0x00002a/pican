@@ -477,8 +477,7 @@ mod lowering {
                                 span,
                             ),
                         );
-                        if ctx.ctx.opts.picasso_compat_bug_for_bug {
-                            // picasso puts a nop at the end of an ifc
+                        if !out[out.len() - 1].get().is_nop() {
                             out.push(reservation_nop);
                         }
 
