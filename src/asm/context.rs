@@ -43,8 +43,21 @@ pub struct OutputInfo {
     pub register: RegisterId,
     pub mask: ComponentMask,
 }
+
+/// Sorting order for uniforms
+///
+/// This exists _solely_ for compatibility with picasso, it does some extremely uhhh... _interesting_ things with regards to the
+/// index of uniforms where they are offset by 0x20 initially, sorted and then the offset is removed when writing them. We don't do that
+/// so this exists to allow io indexes to have higher precidence than "true" uniform bindings when sorted
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+pub enum UniformSortTy {
+    Io,
+    Uniform,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoundUniform {
+    pub sort: UniformSortTy,
     pub name: SymbolId,
     pub start_register: Register,
     pub end_register: Register,

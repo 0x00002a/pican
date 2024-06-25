@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::{cmp::Ordering, collections::HashMap};
+
+use strum::EnumCount;
 
 use crate::{
     context::PicanContext,
@@ -17,7 +19,7 @@ use crate::{
 };
 
 use super::{
-    context::{AsmContext, BoundUniform, ConstantUniform, OutputInfo, ProcInfo},
+    context::{AsmContext, BoundUniform, ConstantUniform, OutputInfo, ProcInfo, UniformSortTy},
     float24::Float24,
     instrs::InstructionPack,
     ir::{self, Instruction, ProcId, RegHole, RegHoleKind, RegOperand, RegisterId, Vec4},
@@ -80,11 +82,21 @@ impl RegCache {
     }
 }
 
-#[derive(Default)]
+struct UniformTracker {
+    begin: usize,
+    count: usize,
+}
+
+impl UniformTracker {
+    fn new(begin: usize) -> Self {
+        Self { begin, count: 0 }
+    }
+}
+
 struct FreeRegTracker {
-    next_bool: usize,
-    next_int: usize,
-    next_float: usize,
+    next_bool: UniformTracker,
+    next_int: UniformTracker,
+    next_float: UniformTracker,
     next_input: usize,
     next_output: usize,
     // these count up but resolve to max - value
@@ -92,38 +104,63 @@ struct FreeRegTracker {
     next_c_float: usize,
     next_c_bool: usize,
 }
+impl Default for FreeRegTracker {
+    fn default() -> Self {
+        Self {
+            next_bool: UniformTracker::new(0x88 - 0x20),
+            next_int: UniformTracker::new(0x80 - 0x20),
+            next_float: UniformTracker::new(0),
+            next_input: 0,
+            next_output: 0,
+            next_c_int: 0,
+            next_c_float: 0,
+            next_c_bool: 0,
+        }
+    }
+}
+
 impl FreeRegTracker {
     fn allocate_impl(&mut self, kind: RegisterKind, constant: bool) -> Option<Register> {
-        let next = match kind {
-            RegisterKind::FloatingVecUniform => &mut self.next_float,
-            RegisterKind::IntegerVecUniform => &mut self.next_int,
-            RegisterKind::BoolUniform => &mut self.next_bool,
-            RegisterKind::Input => &mut self.next_input,
-            RegisterKind::Output => &mut self.next_output,
+        enum AllocTy<'a> {
+            Uniform(&'a mut UniformTracker),
+            Io(&'a mut usize),
+            Constant(&'a mut usize),
+        }
+        let alloc_kind = match kind {
+            RegisterKind::FloatingVecUniform if !constant => AllocTy::Uniform(&mut self.next_float),
+            RegisterKind::IntegerVecUniform if !constant => AllocTy::Uniform(&mut self.next_int),
+            RegisterKind::BoolUniform if !constant => AllocTy::Uniform(&mut self.next_bool),
+            RegisterKind::FloatingVecUniform => AllocTy::Constant(&mut self.next_c_float),
+            RegisterKind::IntegerVecUniform => AllocTy::Constant(&mut self.next_c_int),
+            RegisterKind::BoolUniform => AllocTy::Constant(&mut self.next_c_bool),
+            RegisterKind::Input => AllocTy::Io(&mut self.next_input),
+            RegisterKind::Output => AllocTy::Io(&mut self.next_output),
             RegisterKind::Scratch => unreachable!(),
         };
-        let constant_accessor = match kind {
-            RegisterKind::FloatingVecUniform => Some(&mut self.next_c_float),
-            RegisterKind::IntegerVecUniform => Some(&mut self.next_c_int),
-            RegisterKind::BoolUniform => Some(&mut self.next_c_bool),
-            _ => None,
-        };
-        if *next > kind.max_index()
-            || Some(*next) == constant_accessor.as_ref().map(|c| kind.max_index() - **c)
-        {
-            None
-        } else {
-            let (next, v) = if constant {
-                let c = constant_accessor.expect("tried to allocate non-uniform constant");
+        match alloc_kind {
+            AllocTy::Uniform(u) => {
+                if u.count > kind.max_index() {
+                    None
+                } else {
+                    let v = u.begin + u.count;
+                    u.count += 1;
+                    Some(Register::new(kind, v))
+                }
+            }
+            AllocTy::Io(io) => {
+                if *io > kind.max_index() {
+                    None
+                } else {
+                    let v = *io;
+                    *io += 1;
+                    Some(Register::new(kind, v))
+                }
+            }
+            AllocTy::Constant(c) => {
                 let v = kind.max_index() - *c;
-                (c, v)
-            } else {
-                let v = *next;
-                (next, v)
-            };
-            let r = Register::new(kind, v);
-            *next += 1;
-            Some(r)
+                *c += 1;
+                Some(Register::new(kind, v))
+            }
         }
     }
 
@@ -371,6 +408,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                     let name = self.asm_ctx.define_symbol(name);
                     self.asm_ctx.uniforms.push(BoundUniform {
                         name,
+                        sort: UniformSortTy::Uniform,
                         start_register: start,
                         end_register: end,
                     })
@@ -473,6 +511,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                         .insert(IdentKey::new(name.into_inner(), None), r);
                     let name = self.asm_ctx.define_symbol(i.name.into_inner());
                     self.asm_ctx.uniforms.push(BoundUniform {
+                        sort: UniformSortTy::Io,
                         name,
                         start_register: reg,
                         end_register: reg,
@@ -487,9 +526,15 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
         for ent in self.pir.entry_points {
             self.lower_entry_point(ent.get())?;
         }
-        self.asm_ctx
-            .uniforms
-            .sort_by_key(|u| u.start_register.index);
+        // this sort is needed to be compat with picasso
+        self.asm_ctx.uniforms.sort_by(|a, b| {
+            let ord = a.sort.cmp(&b.sort);
+            if let Ordering::Equal = ord {
+                a.start_register.index.cmp(&b.start_register.index)
+            } else {
+                ord
+            }
+        });
         Ok((self.asm_ctx, self.asm))
     }
 }
