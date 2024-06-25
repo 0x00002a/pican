@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::{
     context::{AsmContext, SymbolId},
     instrs::InstructionPack,
-    ir::{self, RegHole, RegOperand, RegisterId, SwizzleDims},
+    ir::{self, RegOperand, RegisterId, SwizzleDims},
     shbin::{
         self,
         instruction::{OpCodeInstructionFormat, OperandDescriptor, OperandSource},
@@ -40,12 +40,14 @@ impl OpdescMask {
     const fn as_u64(self) -> u64 {
         self.0
     }
-    fn as_descriptor(self) -> OperandDescriptor {
-        OperandDescriptor::from_bytes(self.0.to_le_bytes())
-    }
 
+    /// Turn the mask into the minimal form for compat
+    ///
+    /// This allows merging of operand descriptors later on
     fn optimise(self, opcode: OpCode, desc: OperandDescriptor) -> Self {
-        let mut unused = [ComponentSelector::new(); 3];
+        // this will be used to mask out the unneeded swizzles on the src's
+        let mut src_swiz_mask = [ComponentSelector::new(); 3];
+        // build a component of the swizzle mask as a u8, we could use ComponentSelector but it'd be painful
         let mk_swizzle_comp_mask = |n: u8| -> u8 { 3 << (6 - n * 2) };
         match opcode {
             OpCode::Mul
@@ -57,6 +59,8 @@ impl OpdescMask {
             | OpCode::Mov
             | OpCode::Mad
             | OpCode::Add => {
+                // for all of these only use maximally the destination swizzle, so we need to mask
+                // those bits on all the sources
                 let comp = desc.destination_mask();
                 let mut swiz_mask = 0u8;
                 if !comp.w() {
@@ -72,36 +76,38 @@ impl OpdescMask {
                     swiz_mask |= mk_swizzle_comp_mask(0);
                 }
                 let swiz = ComponentSelector::from_bytes(swiz_mask.to_le_bytes());
-                unused[0] = swiz;
-                unused[1] = swiz;
-                unused[2] = swiz;
+                src_swiz_mask[0] = swiz;
+                src_swiz_mask[1] = swiz;
+                src_swiz_mask[2] = swiz;
             }
             OpCode::Dp3 => {
                 let swiz = ComponentSelector::from_bytes(mk_swizzle_comp_mask(3).to_le_bytes());
-                unused[0] = swiz;
-                unused[1] = swiz;
+                src_swiz_mask[0] = swiz;
+                src_swiz_mask[1] = swiz;
             }
             OpCode::Dph => {
-                unused[0] = ComponentSelector::from_bytes(mk_swizzle_comp_mask(3).to_le_bytes());
+                src_swiz_mask[0] =
+                    ComponentSelector::from_bytes(mk_swizzle_comp_mask(3).to_le_bytes());
             }
             OpCode::Ex2 | OpCode::Lg2 | OpCode::Rcp | OpCode::Rsq => {
-                unused[0] = ComponentSelector::from_bytes(
+                src_swiz_mask[0] = ComponentSelector::from_bytes(
                     (mk_swizzle_comp_mask(1) | mk_swizzle_comp_mask(2) | mk_swizzle_comp_mask(3))
                         .to_le_bytes(),
                 );
             }
             OpCode::Cmp => {
-                unused[0] = ComponentSelector::from_bytes(
+                src_swiz_mask[0] = ComponentSelector::from_bytes(
                     (mk_swizzle_comp_mask(2) | mk_swizzle_comp_mask(3)).to_le_bytes(),
                 );
             }
             _ => {}
         }
+
         let mask = self.as_u64()
             & !(OperandDescriptor::new()
-                .with_s1(OperandSource::new().with_selector(unused[0]))
-                .with_s2(OperandSource::new().with_selector(unused[1]))
-                .with_s3(OperandSource::new().with_selector(unused[2]))
+                .with_s1(OperandSource::new().with_selector(src_swiz_mask[0]))
+                .with_s2(OperandSource::new().with_selector(src_swiz_mask[1]))
+                .with_s3(OperandSource::new().with_selector(src_swiz_mask[2]))
                 .as_u64());
         Self(mask)
     }

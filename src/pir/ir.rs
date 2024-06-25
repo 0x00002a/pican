@@ -42,6 +42,7 @@ pub struct EntryPoint<'a> {
     pub ops: IrNode<&'a [IrNode<Op<'a>>]>,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Op<'a> {
     Regular {

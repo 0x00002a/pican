@@ -1,7 +1,5 @@
 use std::{cmp::Ordering, collections::HashMap};
 
-use strum::EnumCount;
-
 use crate::{
     context::PicanContext,
     diagnostics::{DiagnosticBuilder, Diagnostics, FatalErrorEmitted},

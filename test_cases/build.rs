@@ -15,6 +15,8 @@ fn mk_picasso_conformance(prog_file: &Path, name: &String, bin_path: &Path) -> S
             let pican_input = run_pican(::std::path::Path::new(#prog_file));
             let pican_bin: pican::asm::shbin::Shbin = std::io::Cursor::new(&pican_input).read_le().unwrap();
 
+            println!("{picasso_bin:#?}");
+            println!("{pican_bin:#?}");
             assert_eq!(picasso_bin, pican_bin);
             assert_eq!(&input, &pican_input.as_slice());
         }

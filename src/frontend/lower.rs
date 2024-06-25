@@ -38,7 +38,7 @@ mod lowering {
         context::PicanContext,
         diagnostics::{DiagnosticBuilder, FatalErrorEmitted},
         frontend::ast::{IfStmt, OpCode},
-        ir::{HasSpan, Ident, IrNode, Span, SwizzleDim, SwizzleDims},
+        ir::{HasSpan, Ident, IrNode, SwizzleDim, SwizzleDims},
     };
     use copy_arrayvec::CopyArrayVec;
 

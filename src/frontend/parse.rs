@@ -17,7 +17,6 @@ use crate::properties::OutputProperty;
 use crate::register::{Register, RegisterKind};
 use crate::span::FileId;
 use nom::multi::{fold_many0, many0_count, many1, many_till};
-use nom::sequence::tuple;
 use nom::{
     branch::{self},
     bytes::complete::tag,
@@ -792,9 +791,7 @@ pub fn parse<'a>(
 mod tests {
     use std::str::FromStr;
 
-    use crate::frontend::ast::IfStmt;
     use crate::ops::CondOp;
-    use crate::pir::ir::CondExpr;
     use crate::span::Files;
     use crate::{
         alloc::Bump,
