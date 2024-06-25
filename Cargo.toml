@@ -2,6 +2,10 @@
 name = "pican"
 version = "0.1.0"
 edition = "2021"
+authors = ["0x00002a"]
+description = "A rust toolchain for the PICA200"
+license = "MIT"
+
 
 [workspace]
 members = ["exes/*", "test_cases"]
