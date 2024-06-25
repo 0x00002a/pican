@@ -292,20 +292,18 @@ fn ident<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Ident<'a>> {
         .parse(i)
 }
 fn f32<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, f32> {
-    let frac_part = nom::multi::fold_many1(
-        nmc::satisfy(|ch| ch.is_ascii_digit()),
-        || (0.0, 10.0),
-        |(l, n), c| (l + c.to_digit(10).unwrap() as f32 / n, n + 10.0),
-    )
-    .map(|(l, _)| l);
-    let (i, (negi, ipart, _, floating)) = tuple((
-        ncm::opt(tag("-")).map(|v| v.is_some()),
-        nmc::u32,
-        tag("."),
-        frac_part.req("missing floating part"),
-    ))
-    .parse(i)?;
-    Ok((i, ((ipart as f32) + floating) * if negi { -1. } else { 1. }))
+    let (i, neg) = ncm::opt(nmc::char('-'))(i)?;
+    let (i, leading) = nmc::digit1(i)?;
+    let (i, _) = nmc::char('.')(i)?;
+    let (i, trailing) = nmc::digit1(i)?;
+    let full = format!(
+        "{neg}{leading}.{trailing}",
+        neg = if neg.is_some() { "-" } else { "" },
+        leading = leading.fragment(),
+        trailing = trailing.fragment()
+    );
+
+    Ok((i, full.parse().unwrap()))
 }
 fn float<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, Float> {
     let (i, val) = branch::alt((f32, ncm::map(nmc::i64, |n| n as f32)))
@@ -1080,6 +1078,32 @@ mod tests {
                 .unwrap()
                 .into_inner(),
             Register::new(RegisterKind::Input, 0)
+        );
+    }
+
+    #[test]
+    fn parse_small_constant() {
+        let ctx = TestCtx::new();
+        let r = ctx
+            .run_parser(".constf m(0.5, 0.25, 0.125, 0.0625)", super::constant_decl)
+            .unwrap();
+        let vs = r
+            .value
+            .into_inner()
+            .as_float()
+            .unwrap()
+            .into_inner()
+            .iter()
+            .map(|f| f.into_inner())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            &vs,
+            &[
+                Float::new(0.5).unwrap(),
+                Float::new(0.25).unwrap(),
+                Float::new(0.125).unwrap(),
+                Float::new(0.0625).unwrap(),
+            ]
         );
     }
     #[test]
