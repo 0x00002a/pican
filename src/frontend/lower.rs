@@ -452,7 +452,7 @@ mod lowering {
                         for st in then.get().iter() {
                             lower_stmt(ctx, st, out)?;
                         }
-                        let dest_offset = then.as_ref().map(|_| out.len() - orig_sz);
+                        let dest_offset = out.len();
                         let then_sz = out.len();
                         if let Some(else_) = else_ {
                             for st in else_.get().iter() {
@@ -464,7 +464,9 @@ mod lowering {
                             .unwrap_or(&then)
                             .as_ref()
                             .map(|_| out.len() - then_sz);
-                        let reservation = std::mem::replace(
+                        let dest_offset = then.as_ref().map(|_| dest_offset);
+                        // this is a nop now
+                        let reservation_nop = std::mem::replace(
                             &mut out[reservation_idx],
                             IrNode::new(
                                 pir::Op::Cond(pir::CondExpr {
@@ -477,7 +479,7 @@ mod lowering {
                         );
                         if ctx.ctx.opts.picasso_compat_bug_for_bug {
                             // picasso puts a nop at the end of an ifc
-                            out.push(reservation);
+                            out.push(reservation_nop);
                         }
 
                         Ok(())

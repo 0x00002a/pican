@@ -1,0 +1,10 @@
+.proc main
+    ifc cmp.x
+        mov r1, r2
+
+        ifc cmp.y
+            mov r0, r2
+        .end
+    .end
+
+.end
