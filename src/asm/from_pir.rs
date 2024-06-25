@@ -292,6 +292,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                 let mask = mask.into_inner();
                 swiz.map(|s| s.with_mask(mask)).unwrap_or(mask)
             })
+            .or(swiz)
             .map(|s| s.0.into_inner());
         ir::Operand::Reg(RegOperand {
             register,
