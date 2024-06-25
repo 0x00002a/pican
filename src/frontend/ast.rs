@@ -110,15 +110,15 @@ pub struct Uniform<'a> {
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
-pub struct SwizzleExpr<'a, T> {
+pub struct SwizzleExpr<T> {
     pub target: IrNode<T>,
-    pub swizzle: Option<IrNode<SwizzleDims<'a>>>,
+    pub swizzle: Option<IrNode<SwizzleDims>>,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
 pub struct RegisterBind<'a> {
     pub name: IrNode<Ident<'a>>,
-    pub reg: IrNode<SwizzleExpr<'a, RegisterBindTarget<'a>>>,
+    pub reg: IrNode<SwizzleExpr<RegisterBindTarget<'a>>>,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
@@ -148,7 +148,7 @@ pub struct Operand<'a> {
     pub kind: IrNode<OperandKind<'a>>,
     pub negate: bool,
     pub relative_address: Option<IrNode<u32>>,
-    pub swizzle: Option<IrNode<SwizzleDims<'a>>>,
+    pub swizzle: Option<IrNode<SwizzleDims>>,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]

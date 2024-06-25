@@ -68,8 +68,8 @@ impl<'a> Bindings<'a> {
 #[typesum::sumtype(only = from)]
 #[serde(rename_all = "snake_case", tag = "ty", content = "value")]
 pub enum BindingValue<'a> {
-    SwizzleRegister(SwizzleValue<'a, Register>),
-    SwizzleVar(SwizzleValue<'a, Ident<'a>>),
+    SwizzleRegister(SwizzleValue<Register>),
+    SwizzleVar(SwizzleValue<Ident<'a>>),
     Alias(Ident<'a>),
     Register(Register),
     Uniform(Uniform),
@@ -79,9 +79,9 @@ pub enum BindingValue<'a> {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Hash, PartialEq, Eq)]
-pub struct SwizzleValue<'a, T> {
+pub struct SwizzleValue<T> {
     pub target: IrNode<T>,
-    pub swizzle: IrNode<SwizzleDims<'a>>,
+    pub swizzle: IrNode<SwizzleDims>,
 }
 
 pub struct Alias<'a> {

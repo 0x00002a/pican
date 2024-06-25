@@ -128,7 +128,7 @@ impl<'a> ContextuallyTyped<'a> for Operand<'a> {
     }
 }
 
-impl<'a, T: Typed> Typed for crate::pir::bindings::SwizzleValue<'a, T> {
+impl<T: Typed> Typed for crate::pir::bindings::SwizzleValue<T> {
     fn ty(&self) -> Type {
         self.target.get().ty()
     }

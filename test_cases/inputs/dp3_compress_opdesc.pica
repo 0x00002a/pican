@@ -1,0 +1,21 @@
+.fvec ma[4]
+.fvec cb[4]
+
+.in innrm
+.in intng
+
+.proc main
+    dp3 r15.x, ma[0], innrm
+    dp3 r15.y, ma[1], innrm
+    dp3 r15.z, ma[2], innrm
+    dp3 r13.x, ma[0], intng
+    dp3 r13.y, ma[1], intng
+    dp3 r13.z, ma[2], intng
+
+    dp3 r14.x, cb[0], r15
+    dp3 r14.y, cb[1], r15
+    dp3 r14.z, cb[2], r15
+    dp3 r12.x, cb[0], r13
+    dp3 r12.y, cb[1], r13
+    dp3 r12.z, cb[2], r13
+.end

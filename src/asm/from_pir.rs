@@ -240,10 +240,7 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
             kind: RegHoleKind::Fixed(r),
         }
     }
-    fn resolve_operand_ident(
-        &mut self,
-        ident: &IdentKey<'a>,
-    ) -> (RegHole, Option<SwizzleDims<'a>>) {
+    fn resolve_operand_ident(&mut self, ident: &IdentKey<'a>) -> (RegHole, Option<SwizzleDims>) {
         match self
             .pir
             .bindings
@@ -256,12 +253,12 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
                 Some(v.swizzle.into_inner()),
             ),
             BindingValue::SwizzleVar(v) => {
-                // todo: should swizzles compose?
-                (
-                    self.resolve_operand_ident(&ident.with_ident(v.target.into_inner()))
-                        .0,
-                    Some(v.swizzle.into_inner()),
-                )
+                let (hole, res_swizz) =
+                    self.resolve_operand_ident(&ident.with_ident(v.target.into_inner()));
+                let resolved_swizzle = res_swizz
+                    .map(|r| r.with_mask(v.swizzle.into_inner()))
+                    .unwrap_or(v.swizzle.into_inner());
+                (hole, Some(resolved_swizzle))
             }
             BindingValue::Alias(i) => self.resolve_operand_ident(&ident.with_ident(i)),
             _ => (
@@ -291,10 +288,11 @@ impl<'a, 'm, 'c> LowerCtx<'a, 'm, 'c> {
             crate::pir::ir::OperandKind::Cmp(c) => return ir::Operand::Cmp(c.into_inner()),
         };
         let swizzle = swizzle
-            .map(|s| s.into_inner())
-            .or(swiz)
-            .map(|s| s.0.into_inner())
-            .map(|s| s.iter().copied().collect());
+            .map(|mask| {
+                let mask = mask.into_inner();
+                swiz.map(|s| s.with_mask(mask)).unwrap_or(mask)
+            })
+            .map(|s| s.0.into_inner());
         ir::Operand::Reg(RegOperand {
             register,
             swizzle,

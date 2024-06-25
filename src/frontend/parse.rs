@@ -557,14 +557,14 @@ fn opcode<'a, 'p>(mut i: Input<'a, &'p str>) -> Pres<'a, 'p, OpCode> {
     ncm::fail.ctx("unknown opcode").parse(i)
 }
 
-fn swizzle_dims<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, SwizzleDims<'a>> {
+fn swizzle_dims<'a, 'p>(i: Input<'a, &'p str>) -> Pres<'a, 'p, SwizzleDims> {
     let (i, _) = tag(".")(i)?;
     let (i, expr) = nfo(many0_in(swizzle_dim)).parse(i)?;
-    Ok((i, SwizzleDims(expr.map(|e| e.into_bump_slice()))))
+    Ok((i, SwizzleDims(expr.map(|e| e.into_iter().collect()))))
 }
 fn swizzle_expr<'a, 'p, T, E, P>(
     mut p: P,
-) -> impl FnMut(Input<'a, &'p str>) -> Pres<'a, 'p, SwizzleExpr<'a, T>, Input<'a, &'p str>, E>
+) -> impl FnMut(Input<'a, &'p str>) -> Pres<'a, 'p, SwizzleExpr<T>, Input<'a, &'p str>, E>
 where
     P: Parser<Input<'a, &'p str>, T, E>,
     E: nom::error::ParseError<nom_locate::LocatedSpan<&'p str, InputContext<'a>>>

@@ -66,7 +66,7 @@ pub struct Operand<'a> {
     pub kind: IrNode<OperandKind<'a>>,
     pub negate: bool,
     pub relative_addr: Option<IrNode<u32>>,
-    pub swizzle: Option<IrNode<SwizzleDims<'a>>>,
+    pub swizzle: Option<IrNode<SwizzleDims>>,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]

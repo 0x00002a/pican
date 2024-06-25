@@ -1,5 +1,6 @@
 use bumpalo::Bump;
 use codespan::FileId;
+use copy_arrayvec::CopyArrayVec;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
@@ -193,7 +194,34 @@ pub enum SwizzleDim {
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Debug)]
-pub struct SwizzleDims<'a>(pub IrNode<&'a [SwizzleDim]>);
+pub struct SwizzleDims(pub IrNode<CopyArrayVec<SwizzleDim, 4>>);
+
+impl SwizzleDims {
+    /// Apply as a mask to `other`
+    ///
+    /// # Note
+    /// updates span to that of the mask
+    ///
+    /// # Panics
+    /// if `mask` swizzle dims are empty
+    pub fn with_mask(self, mask: Self) -> Self {
+        let remap_idx = |dim: &SwizzleDim| match *dim {
+            SwizzleDim::X => 0,
+            SwizzleDim::Y => 1,
+            SwizzleDim::Z => 2,
+            SwizzleDim::W => 3,
+        };
+        assert!(!mask.0.get().is_empty(), "empty mask is invalid");
+        Self(self.0.map(|vs| {
+            (0..vs.len())
+                .map(|i| {
+                    let i = i.min(mask.0.get().len() - 1);
+                    vs[remap_idx(&mask.0.get()[i])]
+                })
+                .collect()
+        }))
+    }
+}
 
 pub trait HasSpan {
     fn span(&self) -> Span;

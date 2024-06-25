@@ -1,0 +1,21 @@
+.constf ns(0.0, 0.25, 0.25, 0.5)
+.constf zeroes(0.0, 0.0, 0.0, 0.0)
+
+.in intex
+.out outtex0 texcoord0
+.out outtex1 texcoord1
+
+.proc main
+	mov r11.z, zeroes
+	sge r10, zeroes, r14.z
+	mov r11.xyw, r13.zxzy
+	add r10, r10, r10
+	mad r11.y, r10, r11, -r11
+	cmp r11.xy, le, ge, r11.zw
+    mov r10, intex.xy
+    add r10.y, ns.x, r10.y
+    mul r10.y, ns.x, r10.y
+
+    mov outtex0, r10
+	mov outtex1, r10
+.end

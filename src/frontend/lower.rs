@@ -356,16 +356,16 @@ mod lowering {
             Ok(pir::Op::Regular { opcode, operands })
         }
     }
-    impl<'b> Lower for SwizzleDims<'b> {
-        type Pir<'a> = SwizzleDims<'a>;
+    impl Lower for SwizzleDims {
+        type Pir<'a> = SwizzleDims;
 
-        fn lower<'a, 'c, S: AsRef<str>>(
+        fn lower<'a, S: AsRef<str>>(
             self,
-            ctx: &PirLower<'a, 'c, S>,
+            _ctx: &PirLower<'a, '_, S>,
         ) -> Result<Self::Pir<'a>, FatalErrorEmitted> {
-            Ok(SwizzleDims(self.0.map(|s| -> &'a [SwizzleDim] {
-                ctx.alloc.alloc_slice_copy(s)
-            })))
+            Ok(SwizzleDims(
+                self.0.map(|s| -> CopyArrayVec<SwizzleDim, 4> { s }),
+            ))
         }
     }
     impl<'b> Lower for Operand<'b> {
@@ -384,7 +384,7 @@ mod lowering {
         }
     }
 
-    impl<'b> Lower for SwizzleExpr<'b, RegisterBindTarget<'b>> {
+    impl<'b> Lower for SwizzleExpr<RegisterBindTarget<'b>> {
         type Pir<'a> = pib::BindingValue<'a>;
 
         fn lower<'a, S: AsRef<str>>(
