@@ -1,0 +1,4 @@
+.proc main
+	dp4 r1.x, r0, r0
+	rsq r1.x, r1.x
+.end

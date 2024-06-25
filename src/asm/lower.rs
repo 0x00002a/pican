@@ -13,6 +13,7 @@ use super::{
 
 use crate::{
     asm::context::ConstantUniform,
+    frontend::ast::OpCode,
     register::{RegisterKind, RegisterType},
 };
 use binrw::NullString;
@@ -75,6 +76,13 @@ const OPDESC_MASK_DST_SRC: OpdescMask = OpdescMask {
     s3: false,
 };
 
+const OPDESC_MASK_RSQ: OpdescMask = OpdescMask {
+    component: true,
+    s1: false,
+    s2: false,
+    s3: false,
+};
+
 const OPDESC_MASK_DST_SRC_SRC: OpdescMask = OpdescMask {
     component: true,
     s1: true,
@@ -90,6 +98,13 @@ const OPDESC_MASK_DST_SRC_SRC_SRC: OpdescMask = OpdescMask {
 };
 
 impl OperandDescriptor {
+    fn update(self, other: OperandDescriptor, mask: OpdescMask) -> Self {
+        let me = self.as_u64();
+        let other = other.as_u64();
+        let mask = mask.as_u64();
+        let res = (me & !mask) | (other & mask);
+        Self::from_bytes(res.to_le_bytes())
+    }
     fn compatible_with(self, other: OperandDescriptor, mask: OpdescMask) -> bool {
         let mask = mask.as_u64();
         other.as_u64() & mask == self.as_u64() & mask
@@ -111,7 +126,7 @@ impl LowerCtx {
             let c_desc = self.descriptors[i];
             let min_mask = self.masks[i] & mask;
             if c_desc.compatible_with(desc, min_mask) {
-                self.descriptors[i] = desc;
+                self.descriptors[i] = c_desc.update(desc, mask);
                 self.masks[i] = self.masks[i] | mask;
                 return i as u8;
             }
@@ -125,6 +140,7 @@ impl LowerCtx {
         &mut self,
         operands: &[ir::Operand],
         ty: shi::InstructionFormatKind,
+        opcode: OpCode,
     ) -> shi::Operands {
         let reg_operands = || {
             operands
@@ -205,12 +221,17 @@ impl LowerCtx {
             }
             shi::InstructionFormatKind::OneU => {
                 let operands = reg_operands();
-                let desc = self.add_desc((
-                    OperandDescriptor::new()
-                        .with_destination_mask(operands[0].swizzle.into())
-                        .with_s1(operands[1].into()),
-                    OPDESC_MASK_DST_SRC,
-                ));
+                let (opdesc, mask) = {
+                    let opdesc =
+                        OperandDescriptor::new().with_destination_mask(operands[0].swizzle.into());
+                    if matches!(opcode, OpCode::Rsq) {
+                        (opdesc, OPDESC_MASK_RSQ)
+                    } else {
+                        let opdesc = opdesc.with_s1(operands[1].into());
+                        (opdesc, OPDESC_MASK_DST_SRC)
+                    }
+                };
+                let desc = self.add_desc((opdesc, mask));
                 shi::Operands::OneArgument {
                     dst: resolve_dst(),
                     src1: resolve_src(1),
@@ -280,7 +301,7 @@ impl LowerCtx {
     }
 
     fn lower_instr(&mut self, i: ir::Instruction) -> shi::Instruction {
-        let operands = self.convert_operands(&i.operands, i.opcode.instruction_format());
+        let operands = self.convert_operands(&i.operands, i.opcode.instruction_format(), i.opcode);
         shi::Instruction {
             opcode: i.opcode,
             operands,
