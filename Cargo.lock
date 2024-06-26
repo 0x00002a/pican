@@ -92,18 +92,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "173901312e9850391d4d7c1318c4e099fdc037d61870fca427429830efdb4e5f"
 dependencies = [
  "array-init",
- "binrw_derive 0.13.3",
- "bytemuck",
-]
-
-[[package]]
-name = "binrw"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f36b7cb3ab9ff6a2858650d8dc360e783a5d14dc29594db48c56a3c233cc265"
-dependencies = [
- "array-init",
- "binrw_derive 0.14.0",
+ "binrw_derive",
  "bytemuck",
 ]
 
@@ -112,19 +101,6 @@ name = "binrw_derive"
 version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb515fdd6f8d3a357c8e19b8ec59ef53880807864329b1cb1cba5c53bf76557e"
-dependencies = [
- "either",
- "owo-colors",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "binrw_derive"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20ea7a8c5c8eeffffac6d54d172444e15beffac6f817fac714460a9a9aa88da3"
 dependencies = [
  "either",
  "owo-colors",
@@ -428,7 +404,7 @@ name = "pican"
 version = "0.1.0"
 dependencies = [
  "assert_matches",
- "binrw 0.13.3",
+ "binrw",
  "bumpalo",
  "codespan",
  "codespan-reporting",
@@ -459,7 +435,7 @@ dependencies = [
 name = "pican_disam"
 version = "0.1.0"
 dependencies = [
- "binrw 0.13.3",
+ "binrw",
  "pican",
 ]
 
@@ -468,7 +444,7 @@ name = "picanc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "binrw 0.14.0",
+ "binrw",
  "clap",
  "codespan-reporting",
  "pican",
@@ -649,7 +625,7 @@ name = "test_cases"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "binrw 0.13.3",
+ "binrw",
  "codespan-reporting",
  "glob",
  "pican",

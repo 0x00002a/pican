@@ -1,7 +1,6 @@
-use std::{io::Write, path::Path};
-
 use anyhow::{anyhow, Context};
 use args::CliArgs;
+use binrw::BinRead;
 use clap::Parser;
 use codespan_reporting::{
     files::Files,
@@ -13,6 +12,10 @@ use pican::{
     frontend::parse_and_lower,
     span::FileId,
     ty::PicanTyCheck,
+};
+use std::{
+    io::{Cursor, Write},
+    path::Path,
 };
 
 mod args;
@@ -72,7 +75,13 @@ fn run(args: &CliArgs, ctx: &mut PicanContext<String>) -> anyhow::Result<()> {
                 std::io::stdout().write_all(&blob)?;
             }
         }
-        args::Operation::Disassemble { .. } => todo!(),
+        args::Operation::Disassemble { input_file } => {
+            let input = std::fs::read(input_file).expect("couldn't open input file");
+            let bin = Shbin::read_le(&mut Cursor::new(&input)).expect("failed to parse shbin");
+            for instr in bin.dvlp.compiled_blob.iter() {
+                println!("{}", instr.to_asm(&bin.dvlp.operand_desc_table.data));
+            }
+        }
         args::Operation::Check { input_file } => {
             lower_to_asm(input_file, ctx)?;
         }
