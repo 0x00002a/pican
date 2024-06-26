@@ -5,6 +5,11 @@
 Early stages of a rust toolchain for pica200 shaders in the [picasso] assembly format
 
 
+## Usage
+
+`picanc` is the cli, it hooks into the `pican` library to act as an assembler, disassembler, and linter. Do `cargo -p picanc -- --help` for usage instructions
+
+
 ## Feature parity status
 
 ### Directives
