@@ -7,9 +7,19 @@ use codespan_reporting::{
     term::{self, termcolor::StandardStream, Config},
 };
 use pican::{
-    asm::{context::AsmContext, instrs::InstructionPack, lower::lower_to_shbin, shbin::Shbin},
+    asm::{
+        context::AsmContext,
+        instrs::InstructionPack,
+        ir::Operand,
+        lower::lower_to_shbin,
+        shbin::{
+            instruction::{Instruction, Operands},
+            Shbin,
+        },
+    },
     context::{IrContext, PicanContext},
     frontend::parse_and_lower,
+    ops::OpCode,
     span::FileId,
     ty::PicanTyCheck,
 };
@@ -53,6 +63,77 @@ fn lower_to_asm(
     pican::asm::from_pir::from_pir(&pir, ctx).map_err(|_| anyhow!("failed to lower PIR to asm"))
 }
 
+struct DisassemblePretty<'s> {
+    instrs: &'s Shbin,
+}
+impl std::fmt::Display for DisassemblePretty<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        struct PrettyBlock<'s, 'b> {
+            block: &'b [Instruction],
+            bin: &'s Shbin,
+            offset: usize,
+            indent: usize,
+        }
+
+        impl<'s, 'b> std::fmt::Display for PrettyBlock<'s, 'b> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                let mut i = 0;
+                while i < self.block.len() {
+                    let instr = self.block[i];
+                    let indent = " ".repeat(self.indent);
+                    f.write_fmt(format_args!(
+                        "{indent}{}\n",
+                        instr.to_asm(&self.bin.dvlp.operand_desc_table.data)
+                    ))?;
+                    if matches!(instr.opcode, OpCode::IfC) {
+                        let Operands::ControlFlow {
+                            dst_offset, num, ..
+                        } = instr.operands
+                        else {
+                            unreachable!()
+                        };
+                        let dst_offset = dst_offset as usize - self.offset;
+                        let num = num as usize;
+                        let then = PrettyBlock {
+                            block: &self.block[(i + 1)..dst_offset],
+                            bin: self.bin,
+                            offset: i + self.offset + 1,
+                            indent: self.indent + 4,
+                        };
+                        let else_ = PrettyBlock {
+                            block: &self.block[dst_offset..(dst_offset + num)],
+                            bin: self.bin,
+                            offset: i + self.offset + num + 1,
+                            indent: self.indent + 4,
+                        };
+                        let else_ = if num > 0 {
+                            format!("{indent}.else\n{else_}")
+                        } else {
+                            "".to_owned()
+                        };
+                        f.write_fmt(format_args!("{then}{else_}{indent}.end\n"))?;
+                        i = dst_offset + num - 1;
+                    }
+
+                    i += 1;
+                }
+                Ok(())
+            }
+        }
+        f.write_fmt(format_args!(
+            "{}",
+            PrettyBlock {
+                bin: self.instrs,
+                block: &self.instrs.dvlp.compiled_blob.0.data,
+                offset: 0,
+                indent: 0,
+            }
+        ))?;
+
+        Ok(())
+    }
+}
+
 fn run(args: &CliArgs, ctx: &mut PicanContext<String>) -> anyhow::Result<()> {
     match &args.op {
         args::Operation::Assemble {
@@ -78,9 +159,7 @@ fn run(args: &CliArgs, ctx: &mut PicanContext<String>) -> anyhow::Result<()> {
         args::Operation::Disassemble { input_file } => {
             let input = std::fs::read(input_file).expect("couldn't open input file");
             let bin = Shbin::read_le(&mut Cursor::new(&input)).expect("failed to parse shbin");
-            for instr in bin.dvlp.compiled_blob.iter() {
-                println!("{}", instr.to_asm(&bin.dvlp.operand_desc_table.data));
-            }
+            println!("{}", DisassemblePretty { instrs: &bin });
         }
         args::Operation::Check { input_file } => {
             lower_to_asm(input_file, ctx)?;
