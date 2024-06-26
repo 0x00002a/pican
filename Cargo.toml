@@ -9,7 +9,7 @@ repository = "https://github.com/0x00002a/pican"
 
 
 [workspace]
-members = ["exes/*", "test_cases", "picanc"]
+members = ["test_cases", "picanc"]
 resolver = "2"
 
 

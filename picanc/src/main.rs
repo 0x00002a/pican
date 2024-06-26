@@ -10,7 +10,6 @@ use pican::{
     asm::{
         context::AsmContext,
         instrs::InstructionPack,
-        ir::Operand,
         lower::lower_to_shbin,
         shbin::{
             instruction::{Instruction, Operands},
