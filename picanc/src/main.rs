@@ -1,3 +1,5 @@
+use std::{io::Write, path::Path};
+
 use anyhow::{anyhow, Context};
 use args::CliArgs;
 use clap::Parser;
@@ -6,6 +8,7 @@ use codespan_reporting::{
     term::{self, termcolor::StandardStream, Config},
 };
 use pican::{
+    asm::{context::AsmContext, instrs::InstructionPack, lower::lower_to_shbin, shbin::Shbin},
     context::{IrContext, PicanContext},
     frontend::parse_and_lower,
     span::FileId,
@@ -25,28 +28,53 @@ fn print_diagnostics<'a>(
     }
 }
 
+fn lower_to_asm(
+    input_file: &Path,
+    ctx: &mut PicanContext<String>,
+) -> anyhow::Result<(AsmContext, InstructionPack)> {
+    let pir_ctx = IrContext::new();
+
+    let input_id = ctx.add_file(
+        input_file,
+        std::fs::read_to_string(input_file)
+            .with_context(|| anyhow!("failed to open input file for reading"))?,
+        //.with_context(|| "failed to open input file for reading".to_owned())?,
+    );
+    let pir = parse_and_lower(input_id, ctx, &pir_ctx)
+        .ok_or_else(|| anyhow!("failed to lower AST to PIR"))?;
+    let tycheck = ctx.types_for_module(&pir);
+    tycheck
+        .check()
+        .map_err(|_| anyhow!("typechecking failed"))?;
+
+    pican::asm::from_pir::from_pir(&pir, ctx).map_err(|_| anyhow!("failed to lower PIR to asm"))
+}
+
 fn run(args: &CliArgs, ctx: &mut PicanContext<String>) -> anyhow::Result<()> {
     match &args.op {
-        args::Operation::Assemble { output_file, .. } => todo!(),
+        args::Operation::Assemble {
+            output_file,
+            input_file,
+        } => {
+            if let Some(output_file) = output_file {
+                std::fs::create_dir_all(output_file.parent().expect("output file is invalid"))?;
+            }
+
+            let (asm_ctx, asm) = lower_to_asm(input_file, ctx)?;
+
+            let bin = lower_to_shbin(&asm_ctx, &asm);
+
+            let blob = bin.to_bytes();
+
+            if let Some(output_file) = output_file {
+                std::fs::write(output_file, blob)?;
+            } else {
+                std::io::stdout().write_all(&blob)?;
+            }
+        }
         args::Operation::Disassemble { .. } => todo!(),
         args::Operation::Check { input_file } => {
-            let pir_ctx = IrContext::new();
-
-            let input_id = ctx.add_file(
-                input_file,
-                std::fs::read_to_string(input_file)
-                    .with_context(|| anyhow!("failed to open input file for reading"))?,
-                //.with_context(|| "failed to open input file for reading".to_owned())?,
-            );
-            let pir = parse_and_lower(input_id, ctx, &pir_ctx)
-                .ok_or_else(|| anyhow!("failed to lower AST to PIR"))?;
-            let tycheck = ctx.types_for_module(&pir);
-            tycheck
-                .check()
-                .map_err(|_| anyhow!("typechecking failed"))?;
-
-            pican::asm::from_pir::from_pir(&pir, ctx)
-                .map_err(|_| anyhow!("failed to lower PIR to asm"))?;
+            lower_to_asm(input_file, ctx)?;
         }
     }
 
